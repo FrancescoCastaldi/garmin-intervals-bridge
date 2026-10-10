@@ -1,6 +1,6 @@
 import json
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
@@ -65,12 +65,17 @@ def test_failure_beyond_the_window_or_never_ok_exits_two(tmp_path):
 
 
 
-def write_snapshot(tmp_path, day, *, errors=None, drop_hrv=False):
+def write_snapshot(tmp_path, day, *, errors=None, drop_hrv=False, weighed=False, logged=True):
     snap = sample()
     snap["date"] = day.isoformat()
     snap["errors"] = errors or {}
     if drop_hrv:
         snap["data"].pop("hrv")
+    if weighed:
+        snap["data"]["body_composition"] = {"dateWeightList": [{"calendarDate": day.isoformat(),
+                                                                "weight": 78400, "bodyFat": 17.3}]}
+    if not logged:
+        snap["data"].pop("nutrition")
     (tmp_path / "raw").mkdir(exist_ok=True)
     (tmp_path / "raw" / f"{day.isoformat()}.json").write_text(json.dumps(snap))
 
@@ -95,6 +100,20 @@ def test_a_single_bad_day_is_not_an_alert(tmp_path):
         write_snapshot(tmp_path, today - timedelta(days=n), errors={"spo2": "Timeout"} if n == 1 else {},
                        drop_hrv=(n == 1))
     assert not [x for x in silent_error_checks(cfg(tmp_path), st) if x["alert"]]
+    st.close()
+
+
+def test_todays_partial_file_and_days_without_logging_are_no_dropout(tmp_path):
+    # the health run reads in the morning, before the scale; and nobody weighs in or logs food every day
+    st = Store(tmp_path)
+    today = date(2026, 10, 10)
+    now = datetime(2026, 10, 10, 8, 44, tzinfo=ZoneInfo("Europe/Vienna")).timestamp()
+    for n in range(9, -1, -1):
+        write_snapshot(tmp_path, today - timedelta(days=n), drop_hrv=n <= 1, weighed=n > 2, logged=n > 2)
+    assert not [x for x in silent_error_checks(cfg(tmp_path), st, now=now) if x["alert"]]
+    write_snapshot(tmp_path, today - timedelta(days=2), drop_hrv=True, weighed=True)   # the device's own: alert
+    drop = next(x for x in silent_error_checks(cfg(tmp_path), st, now=now) if "stopped arriving" in x["what"])
+    assert "hrv" in drop["detail"] and "weight" not in drop["detail"] and "kcalConsumed" not in drop["detail"]
     st.close()
 
 

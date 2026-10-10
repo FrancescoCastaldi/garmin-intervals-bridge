@@ -11,7 +11,9 @@ Findings that alert
   - no scheduled run recorded for 3 hours (timers dead, unit broken)
   - a Garmin wellness endpoint erroring on each of the last 3 archived days
   - a wellness field Garmin delivered on most of the previous week but on none
-    of the last 2 days (a changed response shape, a stopped sensor)
+    of the last 2 finished days (a changed response shape, a stopped sensor);
+    what the athlete logs or starts (weight, food, drink, Health Snapshots)
+    is left out, a day without it is a day without logging
   - activities failed twice or more, or uploads pending reconciliation
 """
 from __future__ import annotations
@@ -33,6 +35,9 @@ ENDPOINT_ERROR_DAYS = 3
 DROPOUT_BASELINE_DAYS = 7
 DROPOUT_MIN_BASELINE = 5
 DROPOUT_MISSING_DAYS = 2
+# Raw sources that exist only when the athlete logs something (scale, food and drink log) or
+# starts it (Health Snapshot): their absence is no dropout.
+USER_LOGGED = ("body_composition", "nutrition", "hydration", "health_snapshots")
 
 
 def _today(settings: Any) -> date:
@@ -97,7 +102,7 @@ def silent_error_checks(settings: Any, store: Any, *, now: float | None = None) 
 
     # 3) Garmin wellness endpoints erroring day after day; fields that silently stopped
     raw_dir = os.path.join(str(settings.data_dir), "raw")
-    days = sorted(glob.glob(os.path.join(raw_dir, "2*.json")))[-DROPOUT_BASELINE_DAYS - DROPOUT_MISSING_DAYS:]
+    days = sorted(glob.glob(os.path.join(raw_dir, "2*.json")))[-DROPOUT_BASELINE_DAYS - DROPOUT_MISSING_DAYS - 1:]
     snapshots = []
     for path in days:
         try:
@@ -112,16 +117,19 @@ def silent_error_checks(settings: Any, store: Any, *, now: float | None = None) 
                 findings.append({"alert": True, "what": f"Garmin endpoint '{key}' failing",
                                  "detail": f"error on each of the last {ENDPOINT_ERROR_DAYS} archived days: "
                                            f"{recent[-1]['errors'][key]}"})
-    if len(snapshots) > DROPOUT_MISSING_DAYS:
+    today = datetime.fromtimestamp(now, settings.timezone).date()
+    # today's file holds only what has been read so far (the night, before the scale and the evening)
+    finished = [s for s in snapshots if s["date"] < today.isoformat()][-DROPOUT_BASELINE_DAYS - DROPOUT_MISSING_DAYS:]
+    if len(finished) > DROPOUT_MISSING_DAYS:
         profile = getattr(settings, "wellness_profile", "recommended")
-        today = datetime.fromtimestamp(now, settings.timezone).date()
 
         def fields_of(snapshot: dict) -> set[str]:
             day = date.fromisoformat(snapshot["date"])
-            native, custom = map_wellness(snapshot, day, today, profile)
+            data = {k: v for k, v in (snapshot.get("data") or {}).items() if k not in USER_LOGGED}
+            native, custom = map_wellness({**snapshot, "data": data}, day, today, profile)
             return set(native) | set(custom)
 
-        baseline, latest = snapshots[:-DROPOUT_MISSING_DAYS], snapshots[-DROPOUT_MISSING_DAYS:]
+        baseline, latest = finished[:-DROPOUT_MISSING_DAYS], finished[-DROPOUT_MISSING_DAYS:]
         counts: dict[str, int] = {}
         for s in baseline:
             for f in fields_of(s):

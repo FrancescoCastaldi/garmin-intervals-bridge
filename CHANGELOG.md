@@ -21,6 +21,14 @@
   per activity); `backfill --scope activities --from DATE --intake` fills
   the past from the archive without asking Garmin.
 
+### Fixed
+
+- `health` no longer alerts "weight, bodyFat stopped arriving" after two days
+  without stepping on the scale. The dropout check now looks only at finished
+  days (the morning's file for today has no weigh-in yet) and only at what the
+  device measures by itself, not at what you log or start (weight, food,
+  drink, Health Snapshots).
+
 ### Documentation
 
 - A project icon in the style of the sister project's: the Futureweb Intervals
