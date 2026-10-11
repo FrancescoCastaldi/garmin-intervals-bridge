@@ -31,6 +31,8 @@
 
 ### Documentation
 
+- README: "Use it with an AI coach (MCP)" with the sister project's install
+  channels (PyPI via `uvx`, Docker Hub, Claude Desktop bundle, MCP Registry).
 - A project icon in the style of the sister project's: the Futureweb Intervals
   MCP's bars and endpoints, here as a bridge deck between two endpoints carried
   by the bars as piers (`docs/assets/icon-bridge*`, shown above the README).

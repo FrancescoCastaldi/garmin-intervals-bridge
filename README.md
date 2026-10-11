@@ -52,7 +52,8 @@ overwritten unless they demonstrably came from a filtered file.
 **Sister project:** the [Futureweb Intervals MCP](https://github.com/futureweb/intervals-mcp-server)
 lets ChatGPT, Claude and any other MCP client read and analyse everything the bridge writes:
 every custom activity field and stream, every native and `Garmin…` wellness field, with the
-names and units of your own definitions. [More below](#analyse-it-with-ai-the-intervals-mcp).
+names and units of your own definitions. Install with `uvx futureweb-intervals-mcp@1.0.0b1`,
+from Docker Hub or as a Claude Desktop bundle; [more below](#use-it-with-an-ai-coach-mcp).
 
 ## What gets synced
 
@@ -224,30 +225,28 @@ with every endpoint). Charts you made yourself are never touched, even with
 the same name. Intervals' API cannot place a chart on a Fitness tab; that
 last click is yours either way.
 
-## Analyse it with AI: the Intervals MCP
+## Use it with an AI coach (MCP)
 
-Charts show the data; the sister project
-[Futureweb Intervals MCP](https://github.com/futureweb/intervals-mcp-server) lets an AI
-assistant work with it. It is a [Model Context Protocol](https://modelcontextprotocol.io)
-server for ChatGPT, Claude and any other MCP client that reads your Intervals.icu account:
-read-only by default, through the Intervals.icu API only, never Garmin. It resolves your
-custom items at run time, so every field and stream the bridge fills shows up in its tools
-with name, code, value and units, without extra configuration:
+The sister project [Futureweb Intervals MCP](https://github.com/futureweb/intervals-mcp-server)
+lets ChatGPT, Claude and any other MCP client coach from everything the bridge writes:
+Stamina per interval, Training Effect, Recovery Time, VO₂max, running dynamics, sleep and
+HRV details, fueling and sweat loss, read with the names and units of your own fields and
+set against your personal baselines. It talks to the Intervals.icu API only, never to
+Garmin, and is read-only by default. Until the bridge has written this morning's values,
+the MCP reports them as "not yet available" rather than as missing or zero; each project
+also works without the other.
 
-| What the bridge writes | Where the MCP reads it |
-| --- | --- |
-| Activity fields: Training Effect, Recovery Time, VO₂max, Performance Condition, Stamina at start/end, Sweat Loss … | `get_activity_details` |
-| Streams: Stamina, Potential Stamina, grade-adjusted speed … | `get_activity_streams`, and per interval in `get_activity_intervals` (for example the stamina drop of each interval) |
-| Wellness: SpO₂, respiration, sleeping HR, HRV detail, sleep stages, Body Battery, readiness, recovery hours, skin temperature, scores, race predictions … | `get_recovery_snapshot` (against 42-day baselines), `get_wellness_trends`, `get_wellness_data` |
-| Nutrition: kcal and macros, total and active burn, daily balance, weight | `get_nutrition_summary`, which reads the bridge's `GarminTotalCalories`, `GarminActiveCalories` and `GarminKcalBalance` by default |
-| All of it over weeks and months | `get_training_summary`: sums only for additive values, Garmin loads kept apart from the Intervals.icu load |
+```bash
+uvx futureweb-intervals-mcp@1.0.0b1                                                  # from PyPI, starts on stdio
+docker run --rm -i -e API_KEY=... -e ATHLETE_ID=i123456 futurewebat/futureweb-intervals-mcp:1.0.0b1
+```
 
-Questions like *"How much stamina did each interval of yesterday's ride cost?"*, *"Is my HRV
-below baseline after this block, and what did sleep stress and respiration do?"* or *"Was I in
-a calorie deficit last month, and did my weight follow?"* are then answered from your own
-data. Each project works without the other; the MCP's
-[Garmin Bridge guide](https://github.com/futureweb/intervals-mcp-server/blob/main/docs/GARMIN_BRIDGE.md)
-has the details and worked examples.
+Claude Desktop: open `futureweb-intervals-mcp-1.0.0b1.mcpb` from the
+[release page](https://github.com/futureweb/intervals-mcp-server/releases/tag/v1.0.0b1).
+[GitHub](https://github.com/futureweb/intervals-mcp-server) ·
+[PyPI](https://pypi.org/project/futureweb-intervals-mcp/) ·
+[MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.futureweb/intervals-mcp-server) ·
+[how it reads the bridge's data](https://github.com/futureweb/intervals-mcp-server/blob/main/docs/GARMIN_BRIDGE.md)
 
 ## Running it
 
