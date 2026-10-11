@@ -12,8 +12,8 @@
 > (night SpO₂, respiration, sleeping HR, Body Battery, HRV details, sleep stages, stress,
 > readiness, logged nutrition and total burn, endurance & hill scores, race predictions,
 > fitness age, Health Snapshots …), backfills the past, and comes with 20 charts for all of it in Intervals'
-> chart library. Runs on Linux (systemd timers), in a container, or on **Windows with one
-> command** ([guide](docs/WINDOWS.md)).
+> chart library. Runs on Linux (systemd timers), in a container, or on **Windows or a Mac
+> with a few copy-and-paste commands** (guides for [Windows](docs/WINDOWS.md) and [Mac](docs/MAC.md)).
 
 <p align="center">
 <img src="https://raw.githubusercontent.com/futureweb/garmin-intervals-bridge/main/docs/images/activity-fields.png" alt="Activity fields filled from the original FIT: training effect, VO2max, performance condition, recovery time, stamina, sweat loss" width="900"><br>
@@ -257,8 +257,8 @@ one-minute `watch` timer and a 30-minute full run, secrets in an
 **Windows, macOS or any PC without systemd:** `pip install garmin-intervals-bridge`
 (it is on [PyPI](https://pypi.org/project/garmin-intervals-bridge/)), then `garmin-intervals-bridge run --apply`
 keeps polling Intervals every minute, does a full run every 30 minutes and
-a health probe once a day, all in one process. A step-by-step guide for
-non-technical users is in [docs/WINDOWS.md](docs/WINDOWS.md).
+a health probe once a day, all in one process. Step-by-step guides for
+non-technical users: [Windows](docs/WINDOWS.md), [Mac](docs/MAC.md).
 
 ### Upload mode: when the official import is off
 

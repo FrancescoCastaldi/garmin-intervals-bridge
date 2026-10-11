@@ -31,6 +31,9 @@
 
 ### Documentation
 
+- A step-by-step guide for the Mac (`docs/MAC.md`), like the Windows one:
+  Python from python.org, the bridge in its own folder, and a LaunchAgent
+  that keeps it running in the background after login.
 - README: "Use it with an AI coach (MCP)" with the sister project's install
   channels (PyPI via `uvx`, Docker Hub, Claude Desktop bundle, MCP Registry).
 - A project icon in the style of the sister project's: the Futureweb Intervals
