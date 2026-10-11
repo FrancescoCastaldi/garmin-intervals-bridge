@@ -11,8 +11,9 @@
   evidence` takes Garmin's only with proof (gear not bought yet or retired on
   that day, or the bike's own sensors missing from the recording), `--prefer
   garmin` always takes Garmin's. Gear is paired by name or `--map`; missing
-  gear is created with `--create`. Intervals recalculates the totals
-  afterwards, and the scheduled runs keep the last week in line.
+  gear is created with `--create`. Afterwards the touched gear and their
+  components get Intervals' own recount of their totals stored (`--recalc`
+  for all paired gear), and the scheduled runs keep the last week in line.
 
 ## 0.4.0 — 2026-10-11
 

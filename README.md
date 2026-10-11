@@ -213,7 +213,10 @@ activity's gear (bike, shoes, skis …) in its archive anyway, so `gear` puts it
 on the Intervals activities **without a single Garmin request**. Intervals
 then counts distance, time and its gear reminders itself, and a bike's
 components follow the bike. It never writes to Garmin and never removes gear
-from Intervals.
+from Intervals. After writing, the touched gear and their components get
+Intervals' own recount of their totals stored (Intervals computes it but does
+not store it by itself); `--recalc` does the same for all paired gear, e.g.
+when totals drifted after reassignments by hand.
 
 ```bash
 garmin-intervals-bridge gear                       # the plan: pairs, gaps, conflicts; writes nothing

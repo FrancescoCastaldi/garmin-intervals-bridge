@@ -102,9 +102,12 @@ class IntervalsClient:
     def create_gear(self, gear: dict) -> dict:
         return self._request("POST", "/gear", json=gear)
 
-    def recalc_gear(self, gear_id: str) -> Any:
-        """Intervals recounts distance, time and activities of one gear from its activities."""
+    def recalc_gear(self, gear_id: str) -> dict:
+        """Intervals' own count of one gear's activities (distance, times, activities); not stored."""
         return self._request("GET", f"/gear/{gear_id}/calc")
+
+    def update_gear(self, gear_id: str, fields: dict) -> Any:
+        return self._request("PUT", f"/gear/{gear_id}", json=fields)
 
     def activities(self, oldest: date, newest: date, fields: list[str] | None = None,
                    limit: int | None = None) -> list[dict]:

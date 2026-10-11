@@ -20,6 +20,7 @@ from .gear import SensorCache as GearSensors
 from .gear import apply_plan as apply_gear_plan
 from .gear import build_plan as build_gear_plan
 from .gear import load_config as load_gear_config
+from .gear import refresh_totals as refresh_gear_totals
 from .gear import report as gear_report
 from .gear import save_config as save_gear_config
 from .gear import sync_recent as sync_gear_recent
@@ -145,6 +146,9 @@ def build_parser() -> argparse.ArgumentParser:
     gear.add_argument("--from", dest="start", help="YYYY-MM-DD (default: everything archived)")
     gear.add_argument("--to", dest="end", help="YYYY-MM-DD (default: today)")
     gear.add_argument("--details", action="store_true", help="List every activity, not only the counts")
+    gear.add_argument("--recalc", action="store_true",
+                      help="Also recount the totals of every paired gear and its components with Intervals' own "
+                           "count, when they drifted (e.g. after reassignments by hand)")
     sub.add_parser("status", help="Show pending uploads requiring manual reconciliation")
     account = sub.add_parser("snapshot-account", help="Archive what is not a time series: profile, settings, "
                                                       "devices, zones, gear, personal records, badges, workouts, "
@@ -341,6 +345,11 @@ def main(argv: list[str] | None = None) -> int:
                         done = apply_gear_plan(plan, intervals)
                         save_gear_config(store, plan, done.pop("ids"))
                         out["result"] = done
+                    if args.recalc:
+                        corrected = {x["gear"] for x in (out.get("result") or {}).get("totals_corrected", [])}
+                        out["totals"] = [x for x in refresh_gear_totals(
+                            intervals, sorted({t for t in plan["pairs"].values() if not t.startswith("new:")}),
+                            apply=args.apply) if x["gear"] not in corrected]
                     print(json.dumps(out, indent=2, ensure_ascii=False, default=str))
                     return 0
                 garmin = GarminSource(settings.token_dir, settings.garmin_request_delay)

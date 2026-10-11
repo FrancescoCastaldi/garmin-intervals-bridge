@@ -29,7 +29,7 @@ class IntervalsFake:
     def __init__(self, activities, gear_list=None):
         self.remote = activities
         self.gear_list = gear_list if gear_list is not None else [dict(g) for g in INTERVALS_GEAR]
-        self.assigned, self.recalculated, self.created = [], [], []
+        self.assigned, self.recalculated, self.created, self.updated = [], [], [], []
         self.fail_for = set()
 
     def gear(self):
@@ -48,6 +48,10 @@ class IntervalsFake:
 
     def recalc_gear(self, gear_id):
         self.recalculated.append(gear_id)
+        return {"distance": 4556000.0, "moving_time": 3600.0, "elapsed_time": 4000.0, "activities": 108}
+
+    def update_gear(self, gear_id, fields):
+        self.updated.append((gear_id, fields))
 
     def create_gear(self, payload):
         self.created.append(payload)
@@ -163,6 +167,8 @@ def test_apply_creates_assigns_recalculates_and_remembers(tmp_path):
     done = gear.apply_plan(plan, iv)
     assert iv.assigned == [("i101", "b-hai")] and done["failed"] == 1 and done["written"] == 1
     assert iv.recalculated == ["b-hai"] and done["created"] == ['"Zoom Fly" Orange']
+    assert iv.updated == [("b-hai", {"distance": 4556000.0, "activities": 108, "time": 3600.0})]
+    assert done["totals_corrected"] == [{"gear": "Haibike", "km": [0, 4556], "activities": [None, 108]}]
     gear.save_config(st, plan, done["ids"])
     config = gear.load_config(st)
     assert config["policy"] == "intervals" and config["map"]["u-shoe"] == "g1"
@@ -202,3 +208,18 @@ def test_gear_command_plans_without_garmin_and_applies_on_request(tmp_path, monk
     st = Store(tmp_path)
     assert gear.load_config(st)["policy"] == "evidence"          # the scheduled runs keep to it
     st.close()
+
+
+def test_recount_covers_the_bike_s_components_and_writes_only_what_drifted():
+    gear_list = [{"id": "b-grail", "name": "Grail", "distance": 11021000.0, "activities": 209, "time": 3600.0,
+                  "component_ids": ["c-chain", "c-tyre"]},
+                 {"id": "c-chain", "name": "Chain", "component": True, "distance": 4556000.0, "activities": 108,
+                  "time": 3600.0},
+                 {"id": "c-tyre", "name": "Tyre", "component": True, "distance": 0.0, "activities": 0, "time": 0.0}]
+    iv = IntervalsFake([], gear_list)
+    assert gear.refresh_totals(iv, ["b-grail"], apply=False) == [
+        {"gear": "Grail", "km": [11021, 4556], "activities": [209, 108]},
+        {"gear": "Tyre", "km": [0, 4556], "activities": [0, 108]}]          # the chain was right already
+    assert iv.recalculated == ["b-grail", "c-chain", "c-tyre"] and iv.updated == []
+    gear.refresh_totals(iv, ["b-grail"])
+    assert [u[0] for u in iv.updated] == ["b-grail", "c-tyre"]

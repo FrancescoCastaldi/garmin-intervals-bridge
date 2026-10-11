@@ -20,8 +20,13 @@ Per activity (Intervals has one gear per activity; a bike's components follow it
   Intervals only                                       -> stays; nothing is ever removed
 
 Gear is paired by name (unique after normalising) or as told (`--map`); gear Intervals
-lacks is created only on request, retired gear only on top of that. After a bulk run
-Intervals recalculates the totals of every gear that gained or lost an activity.
+lacks is created only on request, retired gear only on top of that.
+
+Totals: Intervals adds each assignment to a gear's totals, but totals that drifted before
+(after reassignments, or components that missed recent rides) stay off until recounted.
+Its calc endpoint returns the count without storing it, so after a bulk run the bridge
+writes Intervals' own count back for every gear that gained or lost an activity, and the
+components of those bikes (whose count Intervals keeps from their own purchase date).
 """
 from __future__ import annotations
 
@@ -462,16 +467,39 @@ def apply_plan(plan: dict, intervals: Any, *, recalc: bool = True) -> dict:
         touched.add(target)
         if row.get("replaces"):
             touched.add(row["replaces"])
-    recalculated = []
-    if recalc:
-        for gear_id in sorted(touched):
-            try:
-                intervals.recalc_gear(gear_id)
-                recalculated.append(gear_id)
-            except Exception as exc:
-                log.warning("Totals of gear %s not recalculated: %s", gear_id, type(exc).__name__)
-    return {"created": created, "written": written, "failed": failed, "recalculated": len(recalculated),
-            "ids": ids}
+    totals = refresh_totals(intervals, sorted(touched)) if recalc and touched else []
+    return {"created": created, "written": written, "failed": failed, "totals_corrected": totals, "ids": ids}
+
+
+def refresh_totals(intervals: Any, gear_ids: list[str], *, apply: bool = True) -> list[dict]:
+    """Store Intervals' own count for these gear and their components; what changed, in km."""
+    records = {str(g["id"]): g for g in intervals.gear()}
+    wanted: list[str] = []
+    for gear_id in gear_ids:
+        wanted.append(str(gear_id))
+        wanted.extend(str(c) for c in (records.get(str(gear_id)) or {}).get("component_ids") or [])
+    changes = []
+    for gear_id in dict.fromkeys(wanted):
+        record = records.get(gear_id) or {}
+        try:
+            count = intervals.recalc_gear(gear_id) or {}
+            fields = {"distance": count.get("distance"), "activities": count.get("activities"),
+                      "time": count.get("elapsed_time") if record.get("use_elapsed_time") else count.get("moving_time")}
+            differ = {k: v for k, v in fields.items()
+                      if v is not None and abs(float(v) - float(record.get(k) or 0)) >= 1}
+            if not differ:
+                continue
+            if apply:
+                intervals.update_gear(gear_id, differ)
+        except Exception as exc:
+            log.warning("Totals of gear %s not recounted: %s", gear_id, type(exc).__name__)
+            continue
+        changes.append({"gear": record.get("name", gear_id),
+                        "km": [round(float(record.get("distance") or 0) / 1000),
+                               round(float(fields["distance"] if fields["distance"] is not None
+                                           else record.get("distance") or 0) / 1000)],
+                        "activities": [record.get("activities"), fields["activities"]]})
+    return changes
 
 
 def report(plan: dict, details: bool = False) -> dict:
