@@ -19,8 +19,10 @@ GUARDED_STATUSES = ("pending", "uploaded")
 # Retry schedule for activities whose processing raised: quick retries for
 # transient errors, then rare ones, so an activity that can never be processed
 # (e.g. Garmin has no device file for it) costs one request a week instead of
-# aborting every run. The last interval repeats.
-RETRY_BACKOFF_SECONDS = (3600, 6 * 3600, 24 * 3600, 7 * 86400)
+# aborting every run. The last interval repeats. The first retry comes soon:
+# right after the watch syncs, Garmin sometimes answers with a server error for
+# an activity it serves fine minutes later.
+RETRY_BACKOFF_SECONDS = (600, 3600, 6 * 3600, 24 * 3600, 7 * 86400)
 
 
 class InstanceBusy(RuntimeError):

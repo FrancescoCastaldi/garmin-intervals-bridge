@@ -1,12 +1,15 @@
+import time
 from datetime import date
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
+from garminconnect import GarminConnectConnectionError
+from requests import HTTPError, Response
 from test_mapping import sample
 from test_sync_enrich import GarminFake, IntervalsFake
 
 from garmin_intervals_bridge.store import Store
-from garmin_intervals_bridge.sync import sync_wellness, watch_once
+from garmin_intervals_bridge.sync import _error_name, sync_wellness, watch_once
 
 
 def settings(tmp_path):
@@ -41,6 +44,29 @@ def test_watch_dry_run_plans_without_writing(tmp_path):
     m = watch_once(settings(tmp_path), g, i, st, apply=False, today=date(2026, 10, 8))
     assert m["planned"] == 1 and i.updates == []
     st.close()
+
+
+class NotReadyGarmin(GarminFake):
+    def original_fit(self, gid):
+        raise GarminConnectConnectionError("API Error 503")
+
+
+def test_a_garmin_server_error_right_after_the_sync_is_retried_within_minutes(tmp_path, caplog):
+    st, g, i = Store(tmp_path), NotReadyGarmin(), PollingIntervals()
+    with caplog.at_level("WARNING"):
+        m = watch_once(settings(tmp_path), g, i, st, apply=True, today=date(2026, 10, 8))
+    assert m["failed"] == 1 and "GarminConnectConnectionError (HTTP 503)" in caplog.text
+    (failed,) = st.failed_activities()
+    assert failed["next_retry"] - time.time() <= 10 * 60
+    st.close()
+
+
+def test_error_name_carries_the_http_status():
+    response = Response()
+    response.status_code = 502
+    assert _error_name(HTTPError("Bad Gateway", response=response)) == "HTTPError (HTTP 502)"
+    assert _error_name(GarminConnectConnectionError("API Error 500 - oops")) == "GarminConnectConnectionError (HTTP 500)"
+    assert _error_name(ValueError("value 503 out of range")) == "ValueError"
 
 
 class WellnessGarmin:

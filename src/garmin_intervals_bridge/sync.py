@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
@@ -17,6 +18,15 @@ from .store import Store
 from .times import external_id_names, parse_utc
 
 log = logging.getLogger(__name__)
+
+
+def _error_name(exc: BaseException) -> str:
+    """The error's type and, when it has one, the HTTP status: a log line that says what happened."""
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    if status is None:
+        found = re.search(r"\b(?:API Error|HTTP) (\d{3})\b", str(exc))
+        status = found.group(1) if found else None
+    return f"{type(exc).__name__} (HTTP {status})" if status else type(exc).__name__
 
 
 _time = parse_utc
@@ -146,7 +156,7 @@ def _complete_intake(gid: str, activity: dict, intervals_id: str | None, garmin:
     except GarminBlocked:
         raise
     except Exception as exc:
-        log.warning("Intake of %s not written: %s; next run tries again", gid, type(exc).__name__)
+        log.warning("Intake of %s not written: %s; next run tries again", gid, _error_name(exc))
 
 
 def backfill_intake(intervals: Any, store: Store, *, start: date, end: date, apply: bool) -> dict:
@@ -223,7 +233,7 @@ def sync_wellness_files(settings: Settings, garmin: Any, store: Store, *, days: 
             raise
         except Exception as exc:
             metrics["failed"] += 1
-            log.warning("Wellness files of %s not mirrored: %s", day, type(exc).__name__)
+            log.warning("Wellness files of %s not mirrored: %s", day, _error_name(exc))
             continue
         metrics[state] += 1
         if state == "saved":
@@ -246,7 +256,7 @@ def _complete_archive(gid: str, activity: dict, garmin: Any, store: Store, metri
         raise
     except Exception as exc:
         metrics["archive_failed"] += 1
-        log.warning("Archiving the summary of %s failed with %s; next run tries again", gid, type(exc).__name__)
+        log.warning("Archiving the summary of %s failed with %s; next run tries again", gid, _error_name(exc))
         return "failed"
     if state == "archived":
         metrics["archived"] += 1
@@ -366,12 +376,12 @@ def sync_activities(settings: Settings, garmin: Any, intervals: Any, store: Stor
                 # its outcome is unknown, so it stays pending and is never retried blindly.
                 metrics["pending"] += 1
                 log.error("Upload of %s ended with %s; outcome unknown, left pending for manual check",
-                          gid, type(exc).__name__)
+                          gid, _error_name(exc))
                 continue
             attempts = store.record_failure(gid, f"{type(exc).__name__}: {exc}")
             metrics["failed"] += 1
             log.warning("Activity %s failed with %s (attempt %d); retrying later with backoff",
-                        gid, type(exc).__name__, attempts)
+                        gid, _error_name(exc), attempts)
     return metrics
 
 def sync_enrich(settings: Settings, garmin: Any, intervals: Any, store: Store, *, apply: bool,
@@ -451,7 +461,7 @@ def sync_enrich(settings: Settings, garmin: Any, intervals: Any, store: Store, *
         except Exception as exc:
             attempts = store.record_failure(gid, f"{type(exc).__name__}: {exc}")
             metrics["failed"] += 1
-            log.warning("Enrich %s failed with %s (attempt %d); retrying later", gid, type(exc).__name__, attempts)
+            log.warning("Enrich %s failed with %s (attempt %d); retrying later", gid, _error_name(exc), attempts)
             continue
         store.clear_failure(gid)
         outcome = result["outcome"]
@@ -593,7 +603,7 @@ def sync_wellness(settings: Settings, garmin: Any, intervals: Any, store: Store,
                                            apply=apply, rewrite=rewrite)
         except Exception as exc:                         # one day's Intervals trouble must not end the run
             metrics["failed"] += 1
-            log.warning("Wellness %s not written: %s", day, type(exc).__name__)
+            log.warning("Wellness %s not written: %s", day, _error_name(exc))
             continue
         if apply and unlocked:
             store.mark_wellness(day, written=True)
@@ -759,7 +769,7 @@ def wellness_check(settings: Settings, garmin: Any, intervals: Any, store: Store
                 store.mark_wellness(day, written=True)
         except Exception as exc:                         # one day's Intervals trouble must not end the run
             metrics["failed"] += 1
-            log.warning("Wellness %s not written: %s", day, type(exc).__name__)
+            log.warning("Wellness %s not written: %s", day, _error_name(exc))
 
     def mirror(day: date) -> bool:
         """The device's original files of a finished day; True when they were just saved."""
@@ -769,7 +779,7 @@ def wellness_check(settings: Settings, garmin: Any, intervals: Any, store: Store
             raise
         except Exception as exc:
             _backoff(store, f"wellness:files:{day}", VERIFY_BACKOFF_MINUTES, now_ts)
-            log.warning("Wellness files of %s not mirrored: %s; trying again later", day, type(exc).__name__)
+            log.warning("Wellness files of %s not mirrored: %s; trying again later", day, _error_name(exc))
             return False
         metrics["files"] += int(saved)
         return saved
@@ -836,7 +846,7 @@ def wellness_check(settings: Settings, garmin: Any, intervals: Any, store: Store
                 _write_wellness_day(current, raw, current, settings, intervals, metrics, apply=apply, night=night)
             except Exception as exc:
                 metrics["failed"] += 1
-                log.warning("Wellness %s not written: %s", current, type(exc).__name__)
+                log.warning("Wellness %s not written: %s", current, _error_name(exc))
     verify_key = f"wellness:verify:{current}"
     if pending_past and not synced and touched and now_ts >= float(store.get_meta(verify_key) or 0):
         # Something new arrived in Intervals for today; ask Garmin whether that was a device sync.
@@ -910,7 +920,7 @@ def watch_once(settings: Settings, garmin: Any, intervals: Any, store: Store, *,
             store.record_failure(external, f"{type(exc).__name__}: {exc}")
             metrics["failed"] += 1
             log.warning("Watch: enrich of %s failed with %s; the scheduled run will retry",
-                        external, type(exc).__name__)
+                        external, _error_name(exc))
             continue
         store.clear_failure(external)
         metrics[result["outcome"]] += 1

@@ -254,7 +254,7 @@ def test_backoff_grows_then_caps_at_a_week(tmp_path):
             "SELECT attempts, next_retry FROM activity WHERE garmin_id='7'").fetchone()
         delays.append(next_retry - started)
     assert attempts == 6
-    expected = [3600, 6 * 3600, 24 * 3600, 7 * 86400, 7 * 86400, 7 * 86400]
+    expected = [600, 3600, 6 * 3600, 24 * 3600, 7 * 86400, 7 * 86400]
     for actual, wanted in zip(delays, expected):
         assert abs(actual - wanted) < 60
     assert st.is_deferred("7") is True
