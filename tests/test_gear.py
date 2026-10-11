@@ -223,3 +223,27 @@ def test_recount_covers_the_bike_s_components_and_writes_only_what_drifted():
     assert iv.recalculated == ["b-grail", "c-chain", "c-tyre"] and iv.updated == []
     gear.refresh_totals(iv, ["b-grail"])
     assert [u[0] for u in iv.updated] == ["b-grail", "c-tyre"]
+
+
+def test_plan_points_at_activities_from_before_a_gear_was_bought(tmp_path):
+    st, iv = scene(tmp_path)
+    next(g for g in iv.gear_list if g["id"] == "b-grail")["purchased"] = "2023-06-02"
+    for a in iv.remote:
+        a["start_date_local"] = a["start_date"][:19]
+    out = gear.report(gear.build_plan(st, iv))
+    assert out["before_purchase"]["Canyon Grail CF SLX 8 Di2"] == 1           # i102, 2023-05-06
+    st.close()
+
+
+def test_gear_runs_next_to_a_running_bridge(tmp_path, monkeypatch, capsys):
+    from garmin_intervals_bridge import cli
+    from garmin_intervals_bridge.store import single_instance
+    st, iv = scene(tmp_path)
+    st.close()
+    monkeypatch.setenv("BRIDGE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("GARMIN_TOKEN_DIR", str(tmp_path / "tokens"))
+    monkeypatch.setenv("INTERVALS_API_KEY", "not-a-real-key")
+    monkeypatch.setattr(cli, "IntervalsClient", lambda *a, **k: iv)
+    with single_instance(tmp_path, ("activities", "wellness")):                # what `run` holds
+        assert cli.main(["gear"]) == 0
+    assert json.loads(capsys.readouterr().out)["apply"] is False

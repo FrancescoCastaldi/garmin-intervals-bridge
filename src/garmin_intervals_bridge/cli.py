@@ -280,6 +280,8 @@ def main(argv: list[str] | None = None) -> int:
         lock_scopes = (("activities", "wellness") if scope in (None, "all") and args.cmd in ("sync", "run", "watch")
                        else ("wellness",) if scope == "wellness"
                        else ("health",) if args.cmd == "health"
+                       # gear touches only the gear field: next to a running `run`, only not twice at once
+                       else ("gear",) if args.cmd == "gear"
                        # read-only diagnosis must work next to a running `run`: no shared state written
                        else () if args.cmd in ("status", "snapshot-account", "gap")
                        else ("activities",))

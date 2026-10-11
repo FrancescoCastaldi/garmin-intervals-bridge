@@ -328,6 +328,12 @@ def build_plan(store: Any, intervals: Any, *, start: date | None = None, end: da
     intervals_gear = {str(g["id"]): g for g in intervals_gear_list}
     remote = intervals.activities(first - timedelta(days=1), last + timedelta(days=1), fields=ACTIVITY_FIELDS)
     matched = pair_activities(garmin_acts, remote)
+    before_purchase = Counter()
+    for r in remote:
+        record = intervals_gear.get(str((r.get("gear") or {}).get("id") or "")) or {}
+        bought, day = _day(record.get("purchased")), _day(r.get("start_date_local"))
+        if bought and day and day < bought:
+            before_purchase[record.get("name")] += 1
     pairs, why = pair_gear(garmin_gear, intervals_gear_list, explicit, (config or {}).get("map"))
 
     # gear to create: unpaired Garmin gear (used in the window or listed in the account snapshot)
@@ -423,6 +429,7 @@ def build_plan(store: Any, intervals: Any, *, start: date | None = None, end: da
             "window": [first.isoformat(), last.isoformat()], "assign": assign, "kept": kept, "create": to_create,
             "pairs": pairs, "unpaired": why, "intervals_only": dict(intervals_only), "skipped": dict(skipped),
             "touched": touched, "signatures": {k: sorted(list(x) for x in v) for k, v in signatures.items()},
+            "before_purchase": dict(before_purchase),
             "_names": {**{k: g.get("name") for k, g in intervals_gear.items()},
                        **{f"new:{c['uuid']}": c["payload"]["name"] for c in to_create}},
             "_garmin": {u: g["name"] for u, g in garmin_gear.items()}}
@@ -530,6 +537,10 @@ def report(plan: dict, details: bool = False) -> dict:
            "conflicts_kept": grouped(plan["kept"], False),
            "intervals_only": plan["intervals_only"],
            "skipped": plan["skipped"]}
+    if plan.get("before_purchase"):
+        out["before_purchase"] = {"note": "activities carrying gear from before its purchase date: Intervals leaves "
+                                          "them out of the gear's totals (an older pair of skis?)",
+                                  **plan["before_purchase"]}
     if plan.get("without_gear_info"):
         out["hint"] = ("activities archived without their gear: `backfill --scope activities --from DATE "
                        "--archive-only` reads it (one Garmin request each)")
