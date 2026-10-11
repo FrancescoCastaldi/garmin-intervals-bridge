@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — 2026-10-11
+
+More of the morning, what you drank and ate per activity, quicker recovery
+when Garmin isn't ready right after a sync, and a guide for the Mac.
+
+Upgrading needs no change to the configuration; the new activity fields are
+created by the bridge. To fill fluid and food for past activities from the
+local archive (no Garmin requests): `backfill --scope activities --from
+2026-01-01 --intake --apply`.
 
 ### Changed
 
@@ -11,6 +19,12 @@
   endpoints in the morning read: about 80 Garmin requests a day instead of 75.
 - `GarminSleepSpO2Avg` and `GarminSleepRespirationAvg` are written in the
   default profile again (an AI coach reading Garmin's names finds them).
+- A failed activity is retried after 10 minutes the first time, then after
+  an hour, 6 hours, a day and a week (it was an hour first). Right after the
+  watch syncs, Garmin sometimes answers with a server error for an activity
+  it serves fine minutes later.
+- Warnings show the HTTP status next to the error type, e.g.
+  `failed with GarminConnectConnectionError (HTTP 503)`.
 
 ### Added
 
