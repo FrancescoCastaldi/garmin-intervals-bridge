@@ -11,9 +11,10 @@
 > training load untouched. It also syncs the daily wellness data the official sync misses
 > (night SpO₂, respiration, sleeping HR, Body Battery, HRV details, sleep stages, stress,
 > readiness, logged nutrition and total burn, endurance & hill scores, race predictions,
-> fitness age, Health Snapshots …), backfills the past, and comes with 20 charts for all of it in Intervals'
-> chart library. Runs on Linux (systemd timers), in a container, or on **Windows or a Mac
-> with a few copy-and-paste commands** (guides for [Windows](docs/WINDOWS.md) and [Mac](docs/MAC.md)).
+> fitness age, Health Snapshots …), puts your Garmin gear (bikes, shoes, skis) on the activities,
+> backfills the past, and comes with 20 charts for all of it in Intervals' chart library. Runs on
+> Linux (systemd timers), in a container, or on **Windows or a Mac with a few copy-and-paste
+> commands** (guides for [Windows](docs/WINDOWS.md) and [Mac](docs/MAC.md)).
 
 <p align="center">
 <img src="https://raw.githubusercontent.com/futureweb/garmin-intervals-bridge/main/docs/images/activity-fields.png" alt="Activity fields filled from the original FIT: training effect, VO2max, performance condition, recovery time, stamina, sweat loss" width="900"><br>
@@ -65,7 +66,7 @@ from Docker Hub or as a Claude Desktop bundle; [more below](#use-it-with-an-ai-c
 | **Rule** | Only what the partner copy lacks; aligned by timestamp; idempotent | Only empty values; locked days skipped; today's running totals wait until tomorrow |
 | **Archive** | Original + partner copy of every activity, Garmin's summary, weather, gear, splits | Raw JSON of every endpoint and the watch's original wellness files (Health Snapshots included), every day |
 
-Version 0.4.0. Verified end to end on one account (fenix 8, Edge 1040);
+Version 0.5.0. Verified end to end on one account (fenix 8, Edge 1040);
 the first live writes and the evidence are recorded in
 [docs/PLAN.md](docs/PLAN.md).
 
@@ -212,16 +213,16 @@ The official sync does not pass gear to Intervals. The bridge keeps each
 activity's gear (bike, shoes, skis …) in its archive anyway, so `gear` puts it
 on the Intervals activities **without a single Garmin request**. Intervals
 then counts distance, time and its gear reminders itself, and a bike's
-components follow the bike. It never writes to Garmin and never removes gear
-from Intervals. After writing, the touched gear and their components get
-Intervals' own recount of their totals stored (Intervals computes it but does
-not store it by itself); `--recalc` does the same for all paired gear, e.g.
-when totals drifted after reassignments by hand.
+components follow the bike. The bridge never writes to Garmin and never
+removes gear from Intervals.
 
 ```bash
-garmin-intervals-bridge gear                       # the plan: pairs, gaps, conflicts; writes nothing
-garmin-intervals-bridge gear --apply               # fill the gaps, recalculate the totals
+garmin-intervals-bridge gear                    # the plan: pairs, gaps, conflicts; writes nothing
+garmin-intervals-bridge gear --create --apply   # create missing gear in Intervals, fill the gaps
 ```
+
+In a container, next to the running bridge: `docker exec <container>
+garmin-intervals-bridge gear …` (it does not wait for the running bridge).
 
 - **Gaps** (Intervals has no gear on the activity, Garmin has) are filled
   whatever you choose.
@@ -232,19 +233,27 @@ garmin-intervals-bridge gear --apply               # fill the gaps, recalculate 
   day, or the bike's own sensors (Di2, power meter … by serial number,
   learned from the rides both sides agree on) are not in the recording;
   `garmin` always takes Garmin's. Every conflict is listed in the plan,
-  with the proof where there is one.
+  with the proof where there is one. The first `--prefer evidence` run
+  reads the sensors of every archived ride once (a few minutes; cached in
+  `gear-sensors.json`).
 - **Pairs** are found by name (`Grail CF SLX 8 Di2` = `Canyon Grail CF SLX
   8 Di2`); different names are paired with `--map 'GARMIN NAME=INTERVALS
   NAME'`. Gear Intervals does not have is listed, or created with `--create`
   (retired gear only with `--include-retired`).
-- After the first `--apply`, the scheduled runs keep the last week in line
-  with the same choices.
-- Activities from Strava cannot be changed through Intervals' API and are
-  left alone. Activities archived before the bridge kept gear are listed;
-  `backfill --scope activities --from DATE --archive-only` reads it.
-
-The first `--prefer evidence` run reads the sensors of every archived ride
-once (a few minutes; cached in `gear-sensors.json`).
+- **Totals:** Intervals adds each assignment to a gear's totals, but totals
+  that drifted earlier (reassignments by hand) stay off, and it computes a
+  recount without storing it. So after writing, the bridge stores Intervals'
+  own recount for the gear it touched and their components; `--recalc` does
+  that for all paired gear (dry run first: the plan shows each change).
+  Intervals counts a gear only from its purchase date; the plan lists
+  activities that carry gear from before it was bought (an older pair?).
+- **Afterwards** the scheduled runs keep the last week in line with the same
+  choices.
+- **History:** the bridge knows the gear of the activities in its archive —
+  those since it started, plus what `backfill --scope activities --from DATE
+  --archive-only` adds once (a few Garmin requests per activity; stop a
+  running container for it). Activities from Strava cannot be changed through
+  Intervals' API and are left alone.
 
 ## Charts
 

@@ -1,19 +1,31 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 — 2026-10-11
+
+Your Garmin gear on the Intervals activities.
+
+Upgrading needs no change to the configuration. `gear` is a separate command:
+run it once without `--apply` to see the plan, then with `--apply` (and
+`--create` if your gear exists only in Garmin Connect); from then on the
+scheduled runs keep the last week in line.
 
 ### Added
 
 - **Gear:** `gear` puts Garmin's gear (bikes, shoes, skis …) on the Intervals
   activities, from the local archive – no Garmin request, nothing removed,
   nothing written to Garmin. Gaps are filled; where both sides differ,
-  `--prefer intervals` (default) keeps Intervals' assignment, `--prefer
-  evidence` takes Garmin's only with proof (gear not bought yet or retired on
-  that day, or the bike's own sensors missing from the recording), `--prefer
-  garmin` always takes Garmin's. Gear is paired by name or `--map`; missing
-  gear is created with `--create`. Afterwards the touched gear and their
-  components get Intervals' own recount of their totals stored (`--recalc`
-  for all paired gear), and the scheduled runs keep the last week in line.
+  `--prefer intervals` (default) keeps Intervals' assignment (its auto-assign
+  rules or your corrections), `--prefer evidence` takes Garmin's only with
+  proof (the gear not bought yet or retired on that day, or the bike's own
+  sensors – Di2, power meter by serial number – missing from the recording),
+  `--prefer garmin` always takes Garmin's. Gear is paired by name or `--map`;
+  missing gear is created with `--create`. Runs next to a running bridge
+  (`docker exec`).
+- **Gear totals:** Intervals computes a gear's recount but does not store it,
+  so totals that drifted (reassignments by hand) stayed off. After writing,
+  the bridge stores the recount for the touched gear and their components;
+  `--recalc` for all paired gear. The plan lists activities that carry gear
+  from before its purchase date (Intervals does not count those).
 
 ## 0.4.0 — 2026-10-11
 
