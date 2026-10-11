@@ -91,6 +91,21 @@ class IntervalsClient:
     def update_activity(self, activity_id: str, fields: dict) -> Any:
         return self._api("PUT", f"/activity/{_activity_id(activity_id)}", json=fields)
 
+    def set_activity_gear(self, activity_id: str, gear_id: str) -> Any:
+        return self.update_activity(activity_id, {"gear": {"id": gear_id}})
+
+    # ---- gear: /api/v1/athlete/{id}/gear ----
+
+    def gear(self) -> list[dict]:
+        return self._request("GET", "/gear")
+
+    def create_gear(self, gear: dict) -> dict:
+        return self._request("POST", "/gear", json=gear)
+
+    def recalc_gear(self, gear_id: str) -> Any:
+        """Intervals recounts distance, time and activities of one gear from its activities."""
+        return self._request("GET", f"/gear/{gear_id}/calc")
+
     def activities(self, oldest: date, newest: date, fields: list[str] | None = None,
                    limit: int | None = None) -> list[dict]:
         params: dict = {"oldest": oldest.isoformat(), "newest": newest.isoformat()}

@@ -142,6 +142,7 @@ run is exactly what `--apply` would send.
 | `backfill --scope wellness\|activities --from DATE [--to DATE] [--apply]` | Paced, resumable run over the past. |
 | `setup-fields [--apply]` | Create the private custom wellness fields the mapping uses. |
 | `setup-charts [--apply]` | Create (and later complete) private fitness charts for the synced values. |
+| `gear [--prefer intervals\|evidence\|garmin] [--map G=I] [--create] [--apply]` | Put Garmin's gear (bikes, shoes, skis …) on the Intervals activities, from the archive; see [Gear](#gear). |
 | `status` | Pending uploads and failed activities with their retry time. |
 | `health` | Daily digest: probes both services and reports errors that would otherwise stay silent (dead timers, endpoints failing for days, fields Garmin stopped delivering, activities failing repeatedly). Exit 2 only when a human is needed. |
 
@@ -204,6 +205,43 @@ garmin-intervals-bridge backfill --scope wellness --from 2025-01-01 --pause 3 --
 A backfill uses the twelve per-day measurement endpoints by default
 (`--endpoints all` for every endpoint), pauses between days, and skips days
 already fetched, so it can be interrupted and resumed.
+
+## Gear
+
+The official sync does not pass gear to Intervals. The bridge keeps each
+activity's gear (bike, shoes, skis …) in its archive anyway, so `gear` puts it
+on the Intervals activities **without a single Garmin request**. Intervals
+then counts distance, time and its gear reminders itself, and a bike's
+components follow the bike. It never writes to Garmin and never removes gear
+from Intervals.
+
+```bash
+garmin-intervals-bridge gear                       # the plan: pairs, gaps, conflicts; writes nothing
+garmin-intervals-bridge gear --apply               # fill the gaps, recalculate the totals
+```
+
+- **Gaps** (Intervals has no gear on the activity, Garmin has) are filled
+  whatever you choose.
+- **Conflicts** (both have different gear) follow `--prefer`:
+  `intervals` (default) keeps Intervals' — its auto-assign rules or your
+  corrections; `evidence` takes Garmin's only when the record proves
+  Intervals' wrong: that gear was not bought yet or already retired on that
+  day, or the bike's own sensors (Di2, power meter … by serial number,
+  learned from the rides both sides agree on) are not in the recording;
+  `garmin` always takes Garmin's. Every conflict is listed in the plan,
+  with the proof where there is one.
+- **Pairs** are found by name (`Grail CF SLX 8 Di2` = `Canyon Grail CF SLX
+  8 Di2`); different names are paired with `--map 'GARMIN NAME=INTERVALS
+  NAME'`. Gear Intervals does not have is listed, or created with `--create`
+  (retired gear only with `--include-retired`).
+- After the first `--apply`, the scheduled runs keep the last week in line
+  with the same choices.
+- Activities from Strava cannot be changed through Intervals' API and are
+  left alone. Activities archived before the bridge kept gear are listed;
+  `backfill --scope activities --from DATE --archive-only` reads it.
+
+The first `--prefer evidence` run reads the sensors of every archived ride
+once (a few minutes; cached in `gear-sensors.json`).
 
 ## Charts
 

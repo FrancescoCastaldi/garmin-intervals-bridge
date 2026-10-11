@@ -16,6 +16,13 @@ from .config import Settings
 from .enrich import enrich_activity, gap_report, match_activity
 from .fit import compare_fit, extract_original_fit, sha256
 from .garmin import DAY_ENDPOINTS, GarminBlocked, GarminSource, parse_endpoints
+from .gear import SensorCache as GearSensors
+from .gear import apply_plan as apply_gear_plan
+from .gear import build_plan as build_gear_plan
+from .gear import load_config as load_gear_config
+from .gear import report as gear_report
+from .gear import save_config as save_gear_config
+from .gear import sync_recent as sync_gear_recent
 from .health import probe
 from .intervals import IntervalsClient
 from .store import InstanceBusy, Store, single_instance
@@ -122,6 +129,22 @@ def build_parser() -> argparse.ArgumentParser:
     pending.add_argument("--activity-id", required=True)
     pending.add_argument("--i-checked-intervals", action="store_true", required=True,
                          help="Confirm you checked Intervals for duplicates and verified it is absent")
+    gear = sub.add_parser("gear", help="Put Garmin's gear (bikes, shoes ...) on the Intervals activities, from the "
+                                       "local archive: no Garmin requests, nothing removed (dry run unless --apply)")
+    gear.add_argument("--apply", action="store_true", help="Write the plan; later scheduled runs keep the last "
+                                                           "week in line with the same choices")
+    gear.add_argument("--prefer", choices=["intervals", "evidence", "garmin"], default="intervals",
+                      help="When both sides have different gear: keep Intervals' (default), take Garmin's only "
+                           "with proof (gear not bought yet / retired that day, or the bike's own sensors missing "
+                           "from the recording), or always take Garmin's")
+    gear.add_argument("--map", action="append", default=[], metavar="GARMIN=INTERVALS",
+                      help="Pair gear whose names differ, e.g. --map 'Zoom Fly Orange=Nike Zoom Fly - Red' "
+                           "(repeatable)")
+    gear.add_argument("--create", action="store_true", help="Create Garmin gear Intervals does not have")
+    gear.add_argument("--include-retired", action="store_true", help="With --create: retired gear too")
+    gear.add_argument("--from", dest="start", help="YYYY-MM-DD (default: everything archived)")
+    gear.add_argument("--to", dest="end", help="YYYY-MM-DD (default: today)")
+    gear.add_argument("--details", action="store_true", help="List every activity, not only the counts")
     sub.add_parser("status", help="Show pending uploads requiring manual reconciliation")
     account = sub.add_parser("snapshot-account", help="Archive what is not a time series: profile, settings, "
                                                       "devices, zones, gear, personal records, badges, workouts, "
@@ -133,6 +156,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 ACTIVITY_SCAN_MINUTES = 120     # run loop, enrich mode: the poll catches new activities in between
+
+
+def _gear_recent(settings: Settings, store: Store, intervals: IntervalsClient, *, apply: bool) -> dict:
+    """Gear of the last week, once `gear --apply` has set the choices; never fails the run."""
+    try:
+        return sync_gear_recent(settings, store, intervals, apply=apply)
+    except Exception as exc:
+        logging.getLogger("bridge").warning("Gear not synced this time: %s", type(exc).__name__)
+        return {"error": type(exc).__name__}
 
 
 def run_loop(settings: Settings, store: Store, *, apply: bool, poll_seconds: int, sync_minutes: int,
@@ -165,6 +197,10 @@ def run_loop(settings: Settings, store: Store, *, apply: bool, poll_seconds: int
                 else:
                     results["activities"] = sync_enrich(settings, garmin, intervals, store, apply=apply,
                                                         scan_interval_minutes=ACTIVITY_SCAN_MINUTES)
+                    if not results["activities"].get("scan_skipped"):
+                        gear_result = _gear_recent(settings, store, intervals, apply=apply)
+                        if gear_result:
+                            results["gear"] = gear_result
                 results["wellness"] = sync_wellness(settings, garmin, intervals, store, apply=apply)
                 results["garmin_requests"] = garmin.requests
                 store.record_run("sync", results)
@@ -288,6 +324,24 @@ def main(argv: list[str] | None = None) -> int:
                     intervals = IntervalsClient(settings.intervals_api_key, settings.intervals_athlete_id)
                     fields = intervals.provision_fields(apply=args.apply)
                     print(json.dumps({"apply": args.apply, "missing_codes": fields}, indent=2))
+                    return 0
+                if args.cmd == "gear":
+                    intervals = IntervalsClient(settings.intervals_api_key, settings.intervals_athlete_id)
+                    start = date.fromisoformat(args.start) if args.start else None
+                    end = date.fromisoformat(args.end) if args.end else None
+                    if args.prefer == "evidence":
+                        log.info("Reading the paired sensors of the archived rides (once; cached in gear-sensors.json)")
+                    plan = build_gear_plan(store, intervals, start=start, end=end, policy=args.prefer,
+                                           explicit=args.map, create=args.create,
+                                           include_retired=args.include_retired, config=load_gear_config(store),
+                                           sensors=GearSensors(store) if args.prefer == "evidence" else None)
+                    out = gear_report(plan, details=args.details)
+                    out["apply"] = args.apply
+                    if args.apply:
+                        done = apply_gear_plan(plan, intervals)
+                        save_gear_config(store, plan, done.pop("ids"))
+                        out["result"] = done
+                    print(json.dumps(out, indent=2, ensure_ascii=False, default=str))
                     return 0
                 garmin = GarminSource(settings.token_dir, settings.garmin_request_delay)
                 if args.cmd not in ("watch", "sync", "run") and not (
@@ -434,6 +488,10 @@ def main(argv: list[str] | None = None) -> int:
                         results["activities"] = sync_enrich(settings, garmin, intervals, store,
                             apply=args.apply, activity_days=args.activity_days,
                             scan_interval_minutes=max(args.activity_interval, 0))
+                        if not results["activities"].get("scan_skipped"):
+                            gear_result = _gear_recent(settings, store, intervals, apply=args.apply)
+                            if gear_result:
+                                results["gear"] = gear_result
                     elif args.scope in ("all", "activities"):
                         if args.apply and not args.allow_activity_upload:
                             log.warning("Activity uploads disabled; add --allow-activity-upload ONLY AFTER "

@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Gear:** `gear` puts Garmin's gear (bikes, shoes, skis …) on the Intervals
+  activities, from the local archive – no Garmin request, nothing removed,
+  nothing written to Garmin. Gaps are filled; where both sides differ,
+  `--prefer intervals` (default) keeps Intervals' assignment, `--prefer
+  evidence` takes Garmin's only with proof (gear not bought yet or retired on
+  that day, or the bike's own sensors missing from the recording), `--prefer
+  garmin` always takes Garmin's. Gear is paired by name or `--map`; missing
+  gear is created with `--create`. Intervals recalculates the totals
+  afterwards, and the scheduled runs keep the last week in line.
+
 ## 0.4.0 — 2026-10-11
 
 More of the morning, what you drank and ate per activity, quicker recovery
