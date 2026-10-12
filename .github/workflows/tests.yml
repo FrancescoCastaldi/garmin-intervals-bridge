@@ -33,6 +33,7 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install .
       - run: garmin-intervals-bridge --version
+      - run: python -m garmin_intervals_bridge --version          # what the Windows guide uses
       - run: garmin-intervals-bridge status
         env:
           INTERVALS_API_KEY: not-a-real-key

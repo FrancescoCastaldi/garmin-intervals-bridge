@@ -19,6 +19,13 @@
 - ImReady4 and the trend advice share their write and once-a-morning rules
   (`advice.py`); ImReady4's behaviour is unchanged.
 
+### Documentation
+
+- The Windows guide starts the bridge with `py -m garmin_intervals_bridge`
+  everywhere, `run-bridge.cmd` included: Windows' Smart App Control blocks the
+  unsigned `garmin-intervals-bridge.exe` launcher pip creates (issue #5);
+  Python itself is signed.
+
 ### Fixed
 
 - Intervals' rate limit (HTTP 429) no longer ends a wellness write: the same

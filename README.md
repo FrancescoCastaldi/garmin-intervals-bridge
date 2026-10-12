@@ -335,6 +335,7 @@ one-minute `watch` timer and a 30-minute full run, secrets in an
 
 **Windows, macOS or any PC without systemd:** `pip install garmin-intervals-bridge`
 (it is on [PyPI](https://pypi.org/project/garmin-intervals-bridge/)), then `garmin-intervals-bridge run --apply`
+(on Windows `py -m garmin_intervals_bridge run --apply`, which Smart App Control does not block)
 keeps polling Intervals every minute, does a full run every 30 minutes and
 a health probe once a day, all in one process. Step-by-step guides for
 non-technical users: [Windows](docs/WINDOWS.md), [Mac](docs/MAC.md).
