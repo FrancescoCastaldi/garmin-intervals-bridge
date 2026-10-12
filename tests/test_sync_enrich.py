@@ -154,3 +154,26 @@ def test_one_activity_again_after_intervals_reprocess_file(tmp_path):
     assert plan["outcome"] == "enriched" and i.updates[-1] == ("i42", {"AerobicEffect": 3.2})
     assert g.downloads == 1                                    # the archived original, not a new download
     st.close()
+
+
+def test_enrich_puts_the_logged_intake_back_after_a_reprocess(tmp_path):
+    from garmin_intervals_bridge.sync import restore_intake
+
+    class Reprocessed(IntervalsFake):
+        def __init__(self):
+            super().__init__()
+            self.created_items = []
+
+        def create_custom_item(self, item):
+            self.created_items.append(item)
+
+    st, i = Store(tmp_path), Reprocessed()
+    assert restore_intake("42", "i42", i, st, apply=True) == {}                 # nothing archived: nothing to do
+    st.save_activity_json("42", {"summaryDTO": {"waterConsumed": 1500, "caloriesConsumed": 1200}})
+    assert restore_intake("42", "i42", i, st, apply=False) == {"GarminFluidIntake": 1500,
+                                                              "GarminCaloriesConsumed": 1200}
+    assert i.updates == []                                                      # a dry run writes nothing
+    restore_intake("42", "i42", i, st, apply=True)
+    assert i.updates[-1] == ("i42", {"GarminFluidIntake": 1500, "GarminCaloriesConsumed": 1200})
+    assert restore_intake("42", "i42", i, st, apply=True) == {}                 # there now: not again
+    st.close()

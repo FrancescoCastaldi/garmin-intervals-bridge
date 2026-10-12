@@ -235,6 +235,12 @@ def _extras(p: Prompt, saved: dict[str, str], intervals: Any, gear_config: dict 
     out["hrvtrend"] = p.yes("Experimental: a training advice from your 7-day HRV trend, in its own field?",
                             default=saved.get("BRIDGE_HRVTREND_ENABLED", "").lower() == "true")
     out["charts"] = p.yes("Add charts for the Garmin values to your Intervals Fitness page?", default=True)
+    p.say("Garmin sends Intervals a filtered file. The bridge completes it (the default) - or it swaps it for\n"
+          "the original right after it arrives: Intervals then holds the complete file, and its 'Reprocess file'\n"
+          "keeps everything. For that it deletes Garmin's copy (never one with comments); the new activity gets a\n"
+          "new id.")
+    out["swap"] = p.yes("Swap Garmin's copy for the original?",
+                        default=saved.get("BRIDGE_SWAP", "").lower() == "true")
     return out
 
 
@@ -404,7 +410,8 @@ def _run(p: Prompt, client: Callable[[str], Any], garmin_source: Callable[..., A
     try:
         extras = _extras(p, saved, intervals, load_gear_config(store))
         settings = save({"BRIDGE_IMREADY4_ENABLED": str(extras["imready4"]).lower(),
-                         "BRIDGE_HRVTREND_ENABLED": str(extras["hrvtrend"]).lower()})
+                         "BRIDGE_HRVTREND_ENABLED": str(extras["hrvtrend"]).lower(),
+                         "BRIDGE_SWAP": str(extras["swap"]).lower()})
 
         p.say(f"\n5/{STEPS} When the bridge needs you")
         chosen = _alerts(p, saved, notify)

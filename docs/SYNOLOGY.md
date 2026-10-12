@@ -39,6 +39,7 @@ services:
       BRIDGE_UI_PORT: "8765"                     # the bridge's web page
       BRIDGE_UI_PASSWORD: "change-me-please"     # your own password for that page, 8+ characters
       # BRIDGE_IMREADY4_ENABLED: "true"          # ImReady4's training advice, see docs/IMREADY4.md
+      # BRIDGE_SWAP: "true"                      # swap Garmin's filtered copy for the original (README: Modes)
       # BRIDGE_NTFY_URL: "https://ntfy.sh/a-long-name-only-you-know"   # push message when it needs you
       # BRIDGE_ALERT_EMAIL: "you@gmail.com"      # e-mail when it needs you, with
       # BRIDGE_SMTP_PASSWORD: "app password"     # the password to send from that mailbox

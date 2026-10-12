@@ -48,6 +48,7 @@ from .gear import save_config as save_gear_config
 from .health import silent_error_checks
 from .intervals import IntervalsClient
 from .store import InstanceBusy, Store, single_instance
+from .sync import restore_intake
 
 log = logging.getLogger(__name__)
 
@@ -331,6 +332,7 @@ class UI:
             rows = [("Time zone", settings.timezone.key), ("ImReady4 advice", settings.imready4),
                     ("HRV trend advice", settings.hrvtrend), ("Update hint", settings.update_check),
                     ("Calendar note when Garmin needs a sign-in", settings.intervals_notes),
+                    ("Swap Garmin's copy for the original", settings.swap),
                     ("Alerts", ", ".join(alerts.channels(settings)) or "none (BRIDGE_ALERT_EMAIL, BRIDGE_NTFY_URL)")]
             table = "".join(f"<tr><th>{esc(k)}</th><td>{esc(v)}</td></tr>" for k, v in rows)
             return self.page(session, "Settings", f'{message}<section><p>These come from the container\'s '
@@ -348,6 +350,8 @@ class UI:
                        settings.update_check)
                  + box("intervals_notes", "A note in my Intervals calendar when Garmin needs a new sign-in",
                        settings.intervals_notes)
+                 + box("swap", "Swap Garmin's filtered copy of each new activity for the original (deletes the copy, "
+                               "never one with comments; 'Reprocess file' then keeps everything)", settings.swap)
                  + '<label>Replace the Intervals API key (leave empty to keep it) <input type="password" '
                    'name="api_key" autocomplete="off"></label>'
                  + '<h2>When the bridge needs you</h2><p class="muted">Garmin wants a new sign-in, or the bridge '
@@ -398,7 +402,8 @@ class UI:
                                                '(Region/City, e.g. Europe/London).</p>')
         values = {"BRIDGE_TIMEZONE": zone}
         for key, name in (("imready4", "BRIDGE_IMREADY4_ENABLED"), ("hrvtrend", "BRIDGE_HRVTREND_ENABLED"),
-                          ("update_check", "BRIDGE_UPDATE_CHECK"), ("intervals_notes", "BRIDGE_INTERVALS_NOTES")):
+                          ("update_check", "BRIDGE_UPDATE_CHECK"), ("intervals_notes", "BRIDGE_INTERVALS_NOTES"),
+                          ("swap", "BRIDGE_SWAP")):
             values[name] = "true" if form.get(key) == "1" else "false"
         key = form.get("api_key", "").strip()
         if key:
@@ -526,11 +531,15 @@ class UI:
         try:
             with single_instance(settings.data_dir, ("enrich",)):
                 garmin = self.garmin_source(settings.token_dir, settings.garmin_request_delay)
-                plan = enrich_activity(gid, garmin, self._intervals(settings), store, apply=apply, intervals_id=iid,
+                intervals = self._intervals(settings)
+                plan = enrich_activity(gid, garmin, intervals, store, apply=apply, intervals_id=iid,
                                        refresh_own=True, recheck=True)
+                intake = restore_intake(gid, iid, intervals, store, apply=apply)
         finally:
             store.close()
-        fields = sorted((plan.get("fields") or {}).get("writes") or {})
+        if intake and plan.get("outcome") == "nothing_to_add":
+            plan["outcome"] = "enriched" if apply else "planned"
+        fields = sorted(set((plan.get("fields") or {}).get("writes") or {}) | set(intake))
         streams = [w["type"] for w in (plan.get("streams") or {}).get("writes") or []]
         what = (f"fields: {', '.join(fields) or 'none'}; streams: {', '.join(streams) or 'none'}")
         return plan, what

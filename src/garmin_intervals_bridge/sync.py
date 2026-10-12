@@ -154,6 +154,17 @@ def complete_intake(gid: str, activity: dict, intervals_id: str | None, garmin: 
     store.set_meta(key, json.dumps(values, sort_keys=True))
 
 
+def restore_intake(gid: str, intervals_id: str, intervals: Any, store: Store, *, apply: bool) -> dict:
+    """The logged intake again, from the archived summary (no Garmin request): Intervals'
+    "Reprocess file" empties fields the file does not fill. Only empty fields are written."""
+    path = store.activity_json_path(gid)
+    try:
+        summary = json.loads(path.read_text()) if path.is_file() else None
+    except (OSError, ValueError):
+        summary = None
+    return write_intake(intervals_id, intake_values(summary), intervals, apply=apply) if summary else {}
+
+
 def _refresh_gear(gid: str, activity: dict, garmin: Any, store: Store) -> None:
     """The archived extras with Garmin's current gear of the activity; an error keeps the old answer."""
     found = garmin.activity_extras(activity, keys=("gear",))

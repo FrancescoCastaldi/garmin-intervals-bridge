@@ -11,7 +11,15 @@
   keeps everything, and it is your own upload, not Garmin-sourced data. Guarded: only
   Garmin's import, within `BRIDGE_SWAP_HOURS` (48), never with comments or hand-edited
   intervals, upload first and delete last, a failed delete is tried again.
-  `swap <id or link> [--apply]` for one activity by hand.
+  `swap <id or link> [--apply]` for one activity by hand. Values of custom fields
+  without a script (the logged intake, what you typed) go over too. `setup` asks, the
+  web page has a switch.
+
+### Changed
+
+- `enrich <id> --apply` (and the web page's *One activity again*) also puts the logged
+  intake back (`GarminFluidIntake`, `GarminCaloriesConsumed`, from the archived summary):
+  Intervals' *Reprocess file* empties every field the file does not fill – in both modes.
 
 ## 0.8.1 — 2026-10-12
 

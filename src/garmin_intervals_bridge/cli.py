@@ -30,6 +30,7 @@ from .intervals import IntervalsClient
 from .store import InstanceBusy, Store, single_instance
 from .sync import (
     backfill_intake,
+    restore_intake,
     sync_activities,
     sync_enrich,
     sync_wellness,
@@ -588,6 +589,8 @@ def main(argv: list[str] | None = None) -> int:
                         gid, iid = resolve_one(intervals, args.intervals_id)
                     plan = enrich_activity(gid, garmin, intervals, store, apply=args.apply, intervals_id=iid,
                                            refresh_own=True, recheck=True)
+                    if plan.get("intervals_id"):
+                        plan["intake"] = restore_intake(gid, plan["intervals_id"], intervals, store, apply=args.apply)
                     print(json.dumps(plan, indent=2, default=str))
                     return 0
                 if args.cmd == "swap":
