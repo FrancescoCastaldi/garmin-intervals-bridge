@@ -1,14 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.8.0 — 2026-10-12
 
-Set up by answering questions, run in the background without a window, hear about
-problems where you look anyway.
+Set up by answering questions, run in the background without a window, sign in to
+Garmin in your browser – also on a NAS – and get an e-mail or a push message when the
+bridge needs you.
 
 Upgrading needs no change: systemd units and containers keep working as before.
 Windows and Mac users who followed the earlier guides can run `setup` once in their
 bridge folder; it takes over settings, Garmin session and data and replaces the
-hand-made logon task / launch file.
+hand-made logon task / launch file. Container users: the image now serves an optional
+web page (`BRIDGE_UI_PORT`, `BRIDGE_UI_PASSWORD`).
 
 ### Added
 
