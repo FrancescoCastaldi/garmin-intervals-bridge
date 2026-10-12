@@ -207,6 +207,18 @@ class IntervalsClient:
             raise ValueError("Intervals returned 201 with no created activities")
         return {"created": response.status_code == 201, "items": items}
 
+    def athlete(self) -> dict:
+        """The athlete the key belongs to (name, id); `setup` checks a key with it."""
+        obj = self._request("GET", "")
+        if not isinstance(obj, dict):
+            raise ValueError("Intervals athlete response was not an object")
+        return obj
+
+    def create_note(self, day: date, name: str, description: str) -> Any:
+        """A NOTE in the calendar on `day`, for the athlete to read; the bridge never deletes it."""
+        return self._request("POST", "/events", json={"category": "NOTE", "start_date_local": f"{day}T00:00:00",
+                                                      "name": name, "description": description})
+
     def custom_items(self) -> list[dict]:
         if self._custom_items is None:
             items = self._request("GET", "/custom-item")

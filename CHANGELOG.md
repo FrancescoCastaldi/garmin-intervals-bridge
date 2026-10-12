@@ -1,5 +1,44 @@
 # Changelog
 
+## Unreleased
+
+Set up by answering questions, run in the background without a window, hear about
+problems where you look anyway.
+
+Upgrading needs no change: systemd units and containers keep working as before.
+Windows and Mac users who followed the earlier guides can run `setup` once in their
+bridge folder; it takes over settings, Garmin session and data and replaces the
+hand-made logon task / launch file.
+
+### Added
+
+- `setup`: interactive setup – Intervals API key (checked, never shown), time zone,
+  Garmin sign-in with MFA, gear, ImReady4 (only when its field exists), the trend
+  advice, charts, a trial run that writes nothing, then the start in the background.
+  Saves after every step; run it again to change anything.
+- `autostart [--status | --remove | --dry-run]`: runs `run --apply` at every login –
+  a Task Scheduler task for your own account on Windows (`pythonw.exe`, no window, no
+  admin rights, no 72-hour limit, also on battery), a LaunchAgent on the Mac, a
+  systemd user service on Linux.
+- Settings from `~/GarminBridge/.env` (what `setup` writes) when there is no `.env`
+  in the working folder: commands work from any terminal. Global `--env-file PATH`.
+  Relative paths in a settings file count from its folder.
+- `BRIDGE_LOG_FILE`: a log file, 5 MB × 3; also catches a broken setting.
+- Update hint: once a day the health run asks pypi.org for the newest version and
+  logs how to update (`BRIDGE_UPDATE_CHECK=false` turns it off).
+- When Garmin's session ends, a bridge running with `--apply` puts one note in the
+  Intervals calendar ("Garmin bridge: Garmin login needed"), once per episode, never
+  deleted by the bridge (`BRIDGE_INTERVALS_NOTES=false` turns it off).
+- Unraid container template (`deploy/unraid/`, `docs/UNRAID.md`).
+- A data folder the container cannot write to is reported in words, with the fix.
+
+### Changed
+
+- `compose.yaml` keeps the bridge running (`run`, a dry run until you make it
+  `run --apply`; restarts with the machine). Cron users schedule `compose run` as before.
+- Synology: a project file to paste instead of clicking a container together
+  (`docs/SYNOLOGY.md`); Windows and Mac guides are three steps now.
+
 ## 0.7.1 — 2026-10-12
 
 New shoes in Garmin Connect reach Intervals by themselves.

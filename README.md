@@ -14,8 +14,9 @@
 > fitness age, Health Snapshots …), puts your Garmin gear (bikes, shoes, skis) on the activities,
 > can write ImReady4's daily training advice for you, backfills the past, and comes with 20
 > charts for all of it in Intervals' chart library. Runs on
-> Linux (systemd timers), in a container, or on **Windows or a Mac with a few copy-and-paste
-> commands** (guides for [Windows](docs/WINDOWS.md), [Mac](docs/MAC.md) and [Synology](docs/SYNOLOGY.md)).
+> Linux (systemd timers), in a container, or on **Windows or a Mac: install, answer a few
+> questions in `setup`, done** – it then runs in the background (guides for
+> [Windows](docs/WINDOWS.md), [Mac](docs/MAC.md), [Synology](docs/SYNOLOGY.md) and [Unraid](docs/UNRAID.md)).
 
 <p align="center">
 <img src="https://raw.githubusercontent.com/futureweb/garmin-intervals-bridge/main/docs/images/activity-fields.png" alt="Activity fields filled from the original FIT: training effect, VO2max, performance condition, recovery time, stamina, sweat loss" width="900"><br>
@@ -102,7 +103,21 @@ and never assumed.
 
 ## Quick start
 
-Python 3.12 or newer.
+**On your own computer** (Windows, Mac, Linux desktop), Python 3.12 or newer:
+
+```bash
+pip install garmin-intervals-bridge          # Windows: py -m pip install garmin-intervals-bridge
+garmin-intervals-bridge setup                # Windows: py -m garmin_intervals_bridge setup
+```
+
+`setup` asks for the Intervals API key (checked on the spot), confirms the time
+zone, signs in to Garmin (MFA supported), offers gear, charts and the training
+advice, shows a trial run that writes nothing and, on your yes, starts the bridge
+in the background at every login: Task Scheduler on Windows (no window), a
+LaunchAgent on the Mac, a systemd user service on Linux. Settings, log and data
+live in `~/GarminBridge`. Step by step: [Windows](docs/WINDOWS.md), [Mac](docs/MAC.md).
+
+**For development**, or to try single commands by hand:
 
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
@@ -134,6 +149,8 @@ run is exactly what `--apply` would send.
 
 | Command | What it does |
 | --- | --- |
+| `setup` | Interactive setup: API key, time zone, Garmin sign-in, extras, a trial run, start at login. Again = change settings. |
+| `autostart [--status \| --remove \| --dry-run]` | Run `run --apply` in the background at every login (Windows Task Scheduler, macOS LaunchAgent, Linux systemd user service); again = restart. |
 | `login` | Interactive Garmin sign-in (email, password, MFA). Only session tokens are stored. |
 | `probe [--activity-id]` | Download and archive one original FIT. |
 | `gap --activity-id` | Original vs. the copy Intervals holds; lists everything only the original carries. |
@@ -338,10 +355,11 @@ one-minute `watch` timer and a 30-minute full run, secrets in an
 `EnvironmentFile`, hardened units. See [deploy/README.md](deploy/README.md).
 
 **Windows, macOS or any PC without systemd:** `pip install garmin-intervals-bridge`
-(it is on [PyPI](https://pypi.org/project/garmin-intervals-bridge/)), then `garmin-intervals-bridge run --apply`
-(on Windows `py -m garmin_intervals_bridge run --apply`, which Smart App Control does not block)
-keeps polling Intervals every minute, does a full run every 30 minutes and
-a health probe once a day, all in one process. Step-by-step guides for
+(it is on [PyPI](https://pypi.org/project/garmin-intervals-bridge/)), then `garmin-intervals-bridge setup`
+(on Windows `py -m garmin_intervals_bridge setup`, which Smart App Control does not block).
+In the background it runs `run --apply`: one process that polls Intervals every minute, does a
+full run every 30 minutes and a health probe once a day, logging to `~/GarminBridge/bridge.log`.
+`garmin-intervals-bridge run --apply` does the same in a window. Step-by-step guides for
 non-technical users: [Windows](docs/WINDOWS.md), [Mac](docs/MAC.md).
 
 ### Upload mode: when the official import is off
@@ -374,8 +392,9 @@ keep the 30-minute unit for wellness.
 **Docker / Podman:** a ready-made image is on the GitHub Container Registry,
 `ghcr.io/futureweb/garmin-intervals-bridge`, and on Docker Hub,
 `futurewebat/garmin-intervals-bridge` (for NAS boxes whose container manager
-only knows Docker Hub, e.g. Synology – step by step in [docs/SYNOLOGY.md](docs/SYNOLOGY.md)). Tags `latest` and the version, amd64
-and arm64. It runs as a non-root user and takes the same environment
+only knows Docker Hub, e.g. Synology – step by step in [docs/SYNOLOGY.md](docs/SYNOLOGY.md), with a project
+file to paste; for Unraid there is a container template, [docs/UNRAID.md](docs/UNRAID.md)). Tags `latest` and the
+version, amd64 and arm64. It runs as a non-root user and takes the same environment
 variables; without compose:
 
 ```bash
@@ -388,12 +407,12 @@ container has no time zone of its own, and the zone decides which date last
 night's sleep and a day's totals belong to.
 
 ```bash
-cp .env.example .env            # fill INTERVALS_API_KEY
+cp .env.example .env            # fill INTERVALS_API_KEY and BRIDGE_TIMEZONE
 mkdir -p data && chown 10001:10001 data
 docker compose pull             # ghcr.io/futureweb/garmin-intervals-bridge (amd64 + arm64); or: docker compose build
 docker compose run --rm bridge login
-docker compose run --rm bridge enrich --activity-id <garmin id>
-docker compose run --rm bridge sync --apply
+docker compose up -d            # `run`: a dry run, always on; docker compose logs -f shows what it would do
+# then command: ["run", "--apply"] in compose.yaml, and: docker compose up -d
 ```
 
 `login` is the one interactive step: `run --rm` gives it a terminal, it asks
@@ -403,14 +422,16 @@ keeps only Garmin's session tokens in the mounted `data/` volume
 other command just uses those tokens. If Garmin answers the login with
 429, wait an hour and try again.
 
-The compose service is deliberately not an always-on daemon; schedule
-`docker compose run --rm -T bridge watch --apply` from cron or a timer, or
-run `docker compose run --rm -T bridge run --apply` as a long-lived process.
+The compose service runs `run` and restarts with the machine. Prefer cron? Leave
+the service stopped and schedule `docker compose run --rm -T bridge watch --apply`
+every minute and `... sync --apply` every 30 minutes instead.
 
 ## Configuration
 
-Variables can also come from a `.env` file in the working directory (or the
-file named by `BRIDGE_ENV_FILE`); variables already set always win.
+Variables can also come from a settings file: the one named by `--env-file` or
+`BRIDGE_ENV_FILE`, else `.env` in the working directory, else `~/GarminBridge/.env`
+(what `setup` writes; on Windows in your user folder). Variables already set always
+win. Relative paths in a settings file count from its folder.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
@@ -427,6 +448,9 @@ file named by `BRIDGE_ENV_FILE`); variables already set always win.
 | `BRIDGE_STALE_HOURS` | `24` | `health` alerts once a service has failed this long |
 | `BRIDGE_IMREADY4_ENABLED` | `false` | `true`: write ImReady4's training advice into `TrainingAdvice` each morning (see [docs/IMREADY4.md](docs/IMREADY4.md)) |
 | `BRIDGE_HRVTREND_ENABLED` | `false` | `true`: write the experimental trend advice into `HRVTrendAdvice` each morning (see [docs/HRV_TREND.md](docs/HRV_TREND.md)) |
+| `BRIDGE_LOG_FILE` | | Also log to this file (5 MB, three old ones kept); `setup` sets `bridge.log` |
+| `BRIDGE_UPDATE_CHECK` | `true` | Once a day, ask pypi.org for the newest version and log a hint with the update command; `false` turns it off |
+| `BRIDGE_INTERVALS_NOTES` | `true` | When Garmin's session ends and a new `login` is needed, a bridge running with `--apply` puts one note in your Intervals calendar (once per episode, never deleted by the bridge); `false` turns it off |
 
 ## Known limitations
 
@@ -453,7 +477,7 @@ file named by `BRIDGE_ENV_FILE`); variables already set always win.
 
 | Symptom | Meaning |
 | --- | --- |
-| `Garmin login needed` | Run `login` interactively in the same environment the service uses. |
+| `Garmin login needed` (also as a note in the Intervals calendar) | Run `login` interactively in the same environment the service uses. |
 | `429` during `login` | The mobile login path was refused; the web path usually follows. Do not retry in a loop. |
 | `Another bridge instance is running (wellness)` | A backfill holds that scope's lock; activities keep running. |
 | `outcome: unmatched` | The official import has not created the activity yet; the next run looks again. |
@@ -465,7 +489,8 @@ file named by `BRIDGE_ENV_FILE`); variables already set always win.
 Read [SECURITY.md](SECURITY.md). In short: no passwords stored,
 tokens and the API key readable by the service user only, the data
 directory is personal (routes, health data) and must never be committed or
-shared, dry run by default, no deletions ever.
+shared, dry run by default, no deletions ever. The bridge talks to Garmin
+Connect, Intervals.icu and, once a day for the update hint, pypi.org – nothing else.
 
 ## Legal note
 

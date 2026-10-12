@@ -18,7 +18,11 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
-    restart: "no"
-    # Not an always-on daemon: schedule `docker compose run --rm -T bridge watch --apply`
-    # (every minute) and `... sync --apply` (every 30 minutes) from cron or a timer.
-    command: ["sync"]
+    # `docker compose up -d` keeps the bridge running (polls Intervals every minute, a full run
+    # every 30 minutes) and restarts it after a reboot. It starts as a dry run: read what it would
+    # do with `docker compose logs -f`, then change the command to ["run", "--apply"] and `up -d`
+    # again. Set BRIDGE_TIMEZONE in .env: a container has no time zone of its own.
+    # (Cron instead: `docker compose run --rm -T bridge watch --apply` every minute and
+    # `... sync --apply` every 30 minutes; leave the service itself stopped then.)
+    restart: unless-stopped
+    command: ["run"]

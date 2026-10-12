@@ -15,6 +15,8 @@ Findings that alert
     what the athlete logs or starts (weight, food, drink, Health Snapshots)
     is left out, a day without it is a day without logging
   - activities failed twice or more, or uploads pending reconciliation
+
+Informational: what the last day did, a day boundary in UTC, a newer release (notices.py).
 """
 from __future__ import annotations
 
@@ -26,6 +28,8 @@ import time
 from datetime import date, datetime, timedelta
 from typing import Any
 
+from . import notices
+from .autostart import platform
 from .mapping import map_wellness
 
 log = logging.getLogger(__name__)
@@ -55,7 +59,10 @@ def probe(settings: Any, garmin: Any, intervals: Any, store: Any, *, now: float 
         entry: dict[str, Any] = {}
         try:
             call()
-            store.set_meta(f"{name}_last_ok")
+            if name == "garmin":
+                notices.garmin_ok(store)
+            else:
+                store.set_meta(f"{name}_last_ok")
             entry.update(ok=True, last_ok_age_hours=0.0)
         except Exception as exc:                       # every failure counts here
             last_ok = store.meta_updated(f"{name}_last_ok")
@@ -76,6 +83,9 @@ def probe(settings: Any, garmin: Any, intervals: Any, store: Any, *, now: float 
         report["findings"].append({"alert": False, "what": "day boundary in UTC",
                                    "detail": "no BRIDGE_TIMEZONE and no time zone on this computer (a container?): "
                                              "set BRIDGE_TIMEZONE to yours, e.g. Europe/London"})
+    update = notices.update_finding(settings, in_container=platform() == "container")
+    if update:
+        report["findings"].append(update)
     for f in report["findings"]:
         (log.error if f["alert"] else log.warning)("%s: %s", f["what"], f["detail"])
     if any(f["alert"] for f in report["findings"]):

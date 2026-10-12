@@ -4,18 +4,19 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 import time
 from contextlib import ExitStack
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from . import __version__, hrvtrend, imready4
+from . import __version__, autostart, hrvtrend, imready4, notices, wizard
 from .charts import setup_charts
-from .config import Settings
+from .config import Settings, configured_log_file
 from .enrich import enrich_activity, gap_report, match_activity
 from .fit import compare_fit, extract_original_fit, sha256
-from .garmin import DAY_ENDPOINTS, GarminBlocked, GarminSource, parse_endpoints
+from .garmin import DAY_ENDPOINTS, GarminBlocked, GarminLoginNeeded, GarminSource, parse_endpoints
 from .gear import SensorCache as GearSensors
 from .gear import apply_plan as apply_gear_plan
 from .gear import build_plan as build_gear_plan
@@ -42,7 +43,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="garmin-intervals-bridge", description=__doc__)
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--env-file", type=Path, metavar="PATH",
+                        help="Settings file (default: ./.env, else ~/GarminBridge/.env as `setup` writes it)")
     sub = parser.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("setup", help="Set the bridge up step by step: Intervals key, time zone, Garmin login, "
+                                 "extras, a trial run, start at logon (interactive; run it again to change "
+                                 "anything)")
+    start = sub.add_parser("autostart", help="Start the bridge (run --apply) in the background whenever you log "
+                                             "in: Windows Task Scheduler, macOS LaunchAgent, Linux systemd user "
+                                             "service; again = restart with the current settings")
+    what = start.add_mutually_exclusive_group()
+    what.add_argument("--remove", action="store_true", help="Stop it and remove the autostart")
+    what.add_argument("--status", action="store_true", help="Show whether it is set up")
+    what.add_argument("--dry-run", action="store_true", help="Show the files and commands, change nothing")
+    start.add_argument("--mode", choices=["enrich", "upload"], default="enrich", help="As for `run`")
     sub.add_parser("login", help="Sign into Garmin once and save refreshable tokens (interactive)")
     probe = sub.add_parser("probe", help="Download and archive one untouched ORIGINAL FIT; no Intervals writes")
     probe.add_argument("--activity-id", help="Garmin Connect activity ID (default: latest)")
@@ -238,6 +252,8 @@ def run_loop(settings: Settings, store: Store, *, apply: bool, poll_seconds: int
                 results["wellness"] = sync_wellness(settings, garmin, intervals, store, apply=apply)
                 results["garmin_requests"] = garmin.requests
                 store.record_run("sync", results)
+                if garmin.client is not None:
+                    notices.garmin_ok(store)
                 a, w = results["activities"], results["wellness"]
                 labels = {("upload", True): ("uploaded", "uploaded"),
                           ("upload", False): ("would_upload", "to upload"),
@@ -276,6 +292,8 @@ def run_loop(settings: Settings, store: Store, *, apply: bool, poll_seconds: int
             return 0
         except GarminBlocked as exc:
             log.warning("%s; pausing for 15 minutes", exc)
+            if isinstance(exc, GarminLoginNeeded):
+                notices.login_needed(settings, store, intervals, datetime.now(settings.timezone).date(), apply=apply)
             next_sync = max(next_sync, time.time() + 900)
             if iterations is None:
                 time.sleep(900)
@@ -290,20 +308,82 @@ def run_loop(settings: Settings, store: Store, *, apply: bool, poll_seconds: int
     return 0
 
 
+def _log_to_file(path: Path, level: int) -> None:
+    """Also log to a file (the autostarted bridge has no window): 5 MB, three old ones kept."""
+    from logging.handlers import RotatingFileHandler
+    root = logging.getLogger()
+    if any(isinstance(h, RotatingFileHandler) and Path(h.baseFilename) == path for h in root.handlers):
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handler = RotatingFileHandler(path, maxBytes=5_000_000, backupCount=3, encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    handler.setLevel(level)
+    root.addHandler(handler)
+
+
+def _autostart(args: argparse.Namespace, settings: Settings) -> int:
+    if settings.env_file is None:
+        raise ValueError(f"No settings file: run `{wizard.command_name()} setup` first (or pass --env-file)")
+    if args.status:
+        state = autostart.status(settings.env_file)
+        print(f"Autostart ({state['kind']}): {'set up' if state['installed'] else 'not set up'}")
+        if state["detail"] and state["installed"]:
+            print(state["detail"])
+        if settings.log_file:
+            print(f"Log: {settings.log_file}")
+        return 0 if state["installed"] else 1
+    if args.dry_run:
+        steps = autostart.plan(settings.env_file, mode=args.mode)
+        print(json.dumps({k: v for k, v in steps.items() if k != "encoding"}, indent=2))
+        return 0
+    if args.remove:
+        autostart.remove(settings.env_file)
+        print("Autostart removed; the bridge is stopped. Your settings and data stay where they are.")
+        return 0
+    steps = autostart.install(settings.env_file, mode=args.mode)
+    print("The bridge now runs in the background and starts whenever you log in.")
+    if settings.log_file:
+        print(f"Log: {settings.log_file}")
+    else:
+        print("Tip: BRIDGE_LOG_FILE=bridge.log in the settings file gives it a log file.")
+    if steps.get("note"):
+        print(f"Note: {steps['note']}")
+    print(f"Stop it: {wizard.command_name()} autostart --remove")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
+    # pythonw.exe (the Windows autostart) has no console: no stdout or stderr to write to
+    for name in ("stdout", "stderr"):
+        if getattr(sys, name) is None:
+            setattr(sys, name, open(os.devnull, "w", encoding="utf-8"))
     args = build_parser().parse_args(argv)
-    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
-                        format="%(levelname)s %(message)s")
+    level = logging.DEBUG if args.verbose else logging.INFO
+    logging.basicConfig(level=level, format="%(levelname)s %(message)s")
     log = logging.getLogger("bridge")
     try:
         if args.cmd == "compare-fit":
             print(json.dumps(compare_fit(args.file_a, args.file_b), indent=2))
             return 0
+        if args.env_file:
+            os.environ["BRIDGE_ENV_FILE"] = str(args.env_file)
+        if args.cmd == "setup":
+            return wizard.run()
+        log_file = configured_log_file()
+        if log_file:
+            _log_to_file(log_file, level)
         settings = Settings.from_env()
+        if args.cmd == "autostart":
+            return _autostart(args, settings)
         settings.ensure_data_dir()
         if args.cmd == "login":
             garmin = GarminSource(settings.token_dir, settings.garmin_request_delay)
             garmin.login(interactive=True)
+            store = Store(settings.data_dir)
+            try:
+                notices.garmin_ok(store)
+            finally:
+                store.close()
             print("Garmin authenticated; session tokens saved locally.")
             return 0
         scope = getattr(args, "scope", None)
@@ -569,6 +649,12 @@ def main(argv: list[str] | None = None) -> int:
                     store.record_run("sync", results)
                     print(json.dumps(results, indent=2))
                     return 0
+            except GarminLoginNeeded:
+                if getattr(args, "apply", False) and settings.intervals_api_key:
+                    intervals = IntervalsClient(settings.intervals_api_key, settings.intervals_athlete_id)
+                    notices.login_needed(settings, store, intervals, datetime.now(settings.timezone).date(),
+                                         apply=True)
+                raise
             finally:
                 store.close()
     except Exception as exc:

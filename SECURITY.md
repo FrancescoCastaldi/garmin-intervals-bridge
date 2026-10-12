@@ -15,6 +15,8 @@ This project handles GPS tracks, detailed medical/fitness/health metrics (includ
 - Keep remote writes behind explicit `--apply` and `--allow-activity-upload`; audit the difference before enabling them.
 - Keep Garmin official wellness import if useful; only disable the overlapping *activity* import after proven testing.
 - Do not auto-resubmit a pending FIT upload without checking Intervals for the activity. Upload requests may have succeeded even after a network timeout.
+- `setup` reads the API key without echoing it and writes the settings file readable by its owner only (0600); keep `~/GarminBridge` (settings, log, data) private and out of cloud-synced folders you share.
+- The bridge connects to Garmin Connect, Intervals.icu and, once a day for the update hint, pypi.org (`BRIDGE_UPDATE_CHECK=false` turns that off). No telemetry.
 
 **Limitations**
 
