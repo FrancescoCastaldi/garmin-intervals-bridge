@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 — 2026-10-12
+
+Strava-first activities enriched at once, a calmer second training advice to compare
+with ImReady4's, and guides for Synology and a Windows that blocks unknown programs.
+
+Upgrading needs no change to the configuration; the trend advice stays off until
+`BRIDGE_HRVTREND_ENABLED=true`. Windows users: start the bridge with
+`py -m garmin_intervals_bridge …` (also in `run-bridge.cmd`).
 
 ### Added
 
