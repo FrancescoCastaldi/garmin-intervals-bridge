@@ -146,6 +146,7 @@ run is exactly what `--apply` would send.
 | `setup-charts [--apply]` | Create (and later complete) private fitness charts for the synced values. |
 | `gear [--prefer intervals\|evidence\|garmin] [--map G=I] [--create] [--apply]` | Put Garmin's gear (bikes, shoes, skis …) on the Intervals activities, from the archive; see [Gear](#gear). |
 | `imready4 [--date D \| --from D [--to D]] [--compare] [--apply] [--overwrite]` | ImReady4-compatible training advice into `TrainingAdvice`: preview, comparison with existing values, filling the past; see [Training advice](#training-advice-imready4). |
+| `hrvtrend [--date D \| --from D [--to D]] [--compare] [--apply] [--overwrite]` | Experimental trend advice into its own field `HRVTrendAdvice`, compared with ImReady4's; see [docs/HRV_TREND.md](docs/HRV_TREND.md). |
 | `status` | Pending uploads and failed activities with their retry time. |
 | `health` | Daily digest: probes both services and reports errors that would otherwise stay silent (dead timers, endpoints failing for days, fields Garmin stopped delivering, activities failing repeatedly). Exit 2 only when a human is needed. |
 
@@ -275,6 +276,13 @@ compares past days with what the field already holds, and fills days that have
 none. It is off by default. On the reference account it agrees with ImReady4's
 own results on 97.6 % of 1,225 days; the details, the differences and how to
 set it up are in [docs/IMREADY4.md](docs/IMREADY4.md).
+
+Experimental, next to it: `BRIDGE_HRVTREND_ENABLED=true` writes a second
+advice into a field of its own, `HRVTrendAdvice`, from the 7-day HRV trend
+against a 60-day normal range and the night's heart rate, as the HRV-guided
+training studies did – calmer than the single-day score, meant for comparing
+both side by side. It never touches `TrainingAdvice`; see
+[docs/HRV_TREND.md](docs/HRV_TREND.md).
 
 ## Charts
 
@@ -413,6 +421,7 @@ file named by `BRIDGE_ENV_FILE`); variables already set always win.
 | `BRIDGE_GARMIN_REQUEST_DELAY` | `0.5` | Seconds between Garmin requests (minimum 0.25) |
 | `BRIDGE_STALE_HOURS` | `24` | `health` alerts once a service has failed this long |
 | `BRIDGE_IMREADY4_ENABLED` | `false` | `true`: write ImReady4's training advice into `TrainingAdvice` each morning (see [docs/IMREADY4.md](docs/IMREADY4.md)) |
+| `BRIDGE_HRVTREND_ENABLED` | `false` | `true`: write the experimental trend advice into `HRVTrendAdvice` each morning (see [docs/HRV_TREND.md](docs/HRV_TREND.md)) |
 
 ## Known limitations
 

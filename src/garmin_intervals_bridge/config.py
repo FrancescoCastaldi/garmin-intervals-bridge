@@ -85,6 +85,7 @@ class Settings:
     stale_hours: int = 24
     timezone_source: str = "BRIDGE_TIMEZONE"
     imready4: bool = False
+    hrvtrend: bool = False
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -115,6 +116,7 @@ class Settings:
             stale_hours=_positive_int("BRIDGE_STALE_HOURS", 24, 24 * 30),
             timezone_source=tz_source,
             imready4=_flag("BRIDGE_IMREADY4_ENABLED"),
+            hrvtrend=_flag("BRIDGE_HRVTREND_ENABLED"),
         )
 
     def ensure_data_dir(self) -> None:

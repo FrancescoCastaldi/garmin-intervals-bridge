@@ -158,6 +158,14 @@ value is there), `locked`, `wait` or `none` (no advice, with the reason).
 No MATLAB code is copied; the scoring was written from the script's published
 logic, with the author's permission for an open implementation.
 
+## A calmer second opinion
+
+ImReady4 judges single mornings, which makes it jumpy: on the reference account
+it changed its advice on 40 % of days. The HRV-guided training studies mostly
+judged a week's trend instead. The experimental
+[HRV trend advice](HRV_TREND.md) does that and writes into a field of its own,
+so both can be compared side by side; `TrainingAdvice` stays ImReady4's.
+
 ## Troubleshooting
 
 - *"Intervals has no 'TrainingAdvice' wellness field"*: create it as described

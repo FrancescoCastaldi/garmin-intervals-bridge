@@ -8,7 +8,7 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from . import imready4
+from . import hrvtrend, imready4
 from .config import Settings
 from .enrich import enrich_activity, load_field_mappings
 from .fit import sha256, validate_fit, wellness_bundle_index
@@ -767,7 +767,8 @@ def wellness_check(settings: Settings, garmin: Any, intervals: Any, store: Store
     unwritten = [d for d in past + [current]
                  if apply and (state := store.wellness_state(d))[0] and not state[1]
                  and (d == current and morning or store.get_meta(f"wellness:final:{d}"))]
-    advice_due = bool(morning) and imready4.due(settings, store, current, now_ts, apply=apply)
+    advice_due = bool(morning) and (imready4.due(settings, store, current, now_ts, apply=apply)
+                                    or hrvtrend.due(settings, store, current, now_ts, apply=apply))
     if (morning and not watching and not pending_past and not readiness_due and not unwritten and not files_due
             and not advice_due):
         return metrics
@@ -902,16 +903,18 @@ def wellness_check(settings: Settings, garmin: Any, intervals: Any, store: Store
         if mirror(day) and (raw := store.load_snapshot(day)) is not None:
             write(day, raw)
 
-    if morning and imready4.due(settings, store, current, now_ts, apply=apply):
-        # after the night (and any Health Snapshot correction) is in Intervals: Intervals requests only
-        try:
-            metrics["advice"] = imready4.morning(settings, intervals, store, current, now, apply=apply)
-        except Exception as exc:                         # never at the cost of the wellness run
-            log.warning("ImReady4 advice for %s failed: %s", current, _error_name(exc))
+    # the advice once the night (and any Health Snapshot correction) is in Intervals: Intervals requests only
+    for key, feature in (("advice", imready4), ("trend_advice", hrvtrend)):
+        if morning and feature.due(settings, store, current, now_ts, apply=apply):
+            try:
+                metrics[key] = feature.morning(settings, intervals, store, current, now, apply=apply)
+            except Exception as exc:                     # never at the cost of the wellness run
+                log.warning("%s for %s failed: %s", key, current, _error_name(exc))
 
     if store.get_meta("wellness:pruned") != current.strftime("%Y-%m"):
         store.delete_meta("wellness:*:20*", now_ts - 40 * 86400)     # per-day bookkeeping, once a month
         store.delete_meta("imready4:*20*", now_ts - 40 * 86400)
+        store.delete_meta("hrvtrend:*20*", now_ts - 40 * 86400)
         store.set_meta("wellness:pruned", current.strftime("%Y-%m"))
     metrics["new_fields"] = sorted(set(metrics["new_fields"]))
     return metrics

@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Experimental HRV trend advice** (off by default, `BRIDGE_HRVTREND_ENABLED`):
+  a second advice in a field of its own, `HRVTrendAdvice` (Rest / LIT /
+  Planned), from the 7-day ln(rMSSD) mean against a 60-day normal range (±0.5
+  SD), the night's average heart rate and a two-bad-nights rule – the way the
+  HRV-guided training studies judged the trend (Plews, Kiviniemi, Vesterinen,
+  Javaloyes, Nuuttila). `HRVTrendCV` holds the week's coefficient of
+  variation. The bridge creates both fields; `TrainingAdvice` is never
+  touched. `hrvtrend` previews, compares with ImReady4 (`--compare`) and fills
+  the past (`--apply`). See `docs/HRV_TREND.md`.
+
+### Changed
+
+- ImReady4 and the trend advice share their write and once-a-morning rules
+  (`advice.py`); ImReady4's behaviour is unchanged.
+
 ## 0.6.0 — 2026-10-12
 
 ImReady4's training advice, written for you each morning – no more MATLAB Mobile step.

@@ -10,7 +10,7 @@ from contextlib import ExitStack
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from . import __version__, imready4
+from . import __version__, hrvtrend, imready4
 from .charts import setup_charts
 from .config import Settings
 from .enrich import enrich_activity, gap_report, match_activity
@@ -161,6 +161,17 @@ def build_parser() -> argparse.ArgumentParser:
     advice.add_argument("--overwrite", action="store_true",
                         help="Also replace values TrainingAdvice already holds (with --apply)")
     advice.add_argument("--details", action="store_true", help="With --compare: list every day too")
+    trend = sub.add_parser("hrvtrend", help="Experimental: training advice from the 7-day HRV trend into its own "
+                                            "field HRVTrendAdvice (+ HRVTrendCV), next to ImReady4's; a day, a "
+                                            "range, a comparison with TrainingAdvice (dry run unless --apply)")
+    trend.add_argument("--date", help="YYYY-MM-DD (default: today)")
+    trend.add_argument("--from", dest="start", help="YYYY-MM-DD: a range instead of one day")
+    trend.add_argument("--to", dest="end", help="YYYY-MM-DD (default: today)")
+    trend.add_argument("--compare", action="store_true", help="Compare with ImReady4's TrainingAdvice")
+    trend.add_argument("--apply", action="store_true",
+                       help="Create the two fields if missing and write days whose HRVTrendAdvice is empty")
+    trend.add_argument("--overwrite", action="store_true", help="Also replace existing HRVTrendAdvice values")
+    trend.add_argument("--details", action="store_true", help="With --compare: list every day too")
     sub.add_parser("status", help="Show pending uploads requiring manual reconciliation")
     account = sub.add_parser("snapshot-account", help="Archive what is not a time series: profile, settings, "
                                                       "devices, zones, gear, personal records, badges, workouts, "
@@ -299,6 +310,7 @@ def main(argv: list[str] | None = None) -> int:
                        # gear touches only the gear field: next to a running `run`, only not twice at once
                        else ("gear",) if args.cmd == "gear"
                        else ("imready4",) if args.cmd == "imready4"
+                       else ("hrvtrend",) if args.cmd == "hrvtrend"
                        # read-only diagnosis must work next to a running `run`: no shared state written
                        else () if args.cmd in ("status", "snapshot-account", "gap")
                        else ("activities",))
@@ -348,7 +360,7 @@ def main(argv: list[str] | None = None) -> int:
                     fields = intervals.provision_fields(apply=args.apply)
                     print(json.dumps({"apply": args.apply, "missing_codes": fields}, indent=2))
                     return 0
-                if args.cmd == "imready4":
+                if args.cmd in ("imready4", "hrvtrend"):
                     intervals = IntervalsClient(settings.intervals_api_key, settings.intervals_athlete_id)
                     today = datetime.now(settings.timezone).date()
                     if args.date and args.start:
@@ -357,7 +369,8 @@ def main(argv: list[str] | None = None) -> int:
                     end = date.fromisoformat(args.end) if args.end else (today if args.start else start)
                     if start > end:
                         raise ValueError("--from must not be after --to")
-                    out = imready4.run_days(intervals, start, end, apply=args.apply, overwrite=args.overwrite,
+                    feature = imready4 if args.cmd == "imready4" else hrvtrend
+                    out = feature.run_days(intervals, start, end, apply=args.apply, overwrite=args.overwrite,
                                             compare=args.compare, details=args.details, today=today)
                     print(json.dumps(out, indent=2, ensure_ascii=False))
                     return 0

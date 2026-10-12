@@ -27,13 +27,14 @@ the script (github.com/Creastoff/ImReady4.Net, produced with the original code):
 """
 from __future__ import annotations
 
-import json
 import logging
 import math
 from collections import Counter
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Any
+
+from . import advice as advice_rules
 
 log = logging.getLogger(__name__)
 
@@ -52,8 +53,8 @@ ZONES = {
     (3, "recovering"): "LIT – recovery is not complete",
     (6, "illness"): "REST! – be careful, illness or stress detected",
 }
-RETRY_MINUTES = (10, 30, 60, 120, 240)
-GIVE_UP_HOUR = 22                # no complete night by then: no advice for the day
+RETRY_MINUTES = advice_rules.RETRY_MINUTES
+GIVE_UP_HOUR = advice_rules.GIVE_UP_HOUR
 
 
 # ---- the calculation ----
@@ -204,46 +205,21 @@ def field_problem(item: dict | None) -> str | None:
 
 def stored_value(record: dict) -> int | None:
     """The day's TrainingAdvice; an empty string (the script's 'no data') counts as none."""
-    value = record.get(FIELD)
-    if value in (None, ""):
-        return None
-    try:
-        return int(float(value))
-    except (TypeError, ValueError):
-        return None
+    return advice_rules.stored_value(record, FIELD)
 
 
 # ---- one day, with the bridge's write rules ----
 
 def decide(advice: Advice, record: dict, *, overwrite: bool = False) -> str:
-    if advice.value is None:
-        return "wait" if advice.waiting else "none"
-    if record.get("locked") is True:
-        return "locked"
-    current = stored_value(record)
-    if current == advice.value:
-        return "same"
-    if current is not None and not overwrite:
-        return "keep"
-    return "write"
+    return advice_rules.decide(advice.value, advice.waiting, record, FIELD, overwrite=overwrite)
 
 
 def apply_day(intervals: Any, day: date, advice: Advice, record: dict, *, apply: bool,
               overwrite: bool = False) -> dict:
     """Write one day's advice when the rules allow it, and read it back."""
-    action = decide(advice, record, overwrite=overwrite)
-    out = {**advice.explain(), "intervals_value": stored_value(record), "action": action}
-    if action != "write":
-        return out
-    if not apply:
-        out["action"] = "would write"
-        return out
-    intervals.write_wellness(day, {FIELD: advice.value})
-    back = stored_value(intervals.wellness(day))
-    if back != advice.value:
-        raise RuntimeError(f"{FIELD} of {day} reads back as {back}, not {advice.value}")
-    out["action"] = "written"
-    return out
+    action = advice_rules.write(intervals, day, FIELD, advice.value, record, apply=apply, waiting=advice.waiting,
+                                overwrite=overwrite)
+    return {**advice.explain(), "intervals_value": stored_value(record), "action": action}
 
 
 def history(intervals: Any, start: date, end: date) -> list[dict]:
@@ -303,73 +279,34 @@ def comparison(results: list[dict]) -> dict:
                             "margin_to_zone_border": _margin(r)}
                            for r in both if r["value"] != r["intervals_value"]]}
 
-
 # ---- the scheduled runs: once the night is in ----
 
-def _state(store: Any, day: date) -> dict | None:
-    raw = store.get_meta(f"imready4:{day}")
-    try:
-        return json.loads(raw) if raw else None
-    except ValueError:
-        return None
-
-
 def due(settings: Any, store: Any, day: date, now_ts: float, *, apply: bool) -> bool:
-    if not getattr(settings, "imready4", False) or _state(store, day):
-        return False
-    if not apply and store.get_meta(f"imready4:dry:{day}"):
-        return False
-    return now_ts >= float(store.get_meta(f"imready4:next:{day}") or 0)
+    return advice_rules.due(getattr(settings, "imready4", False), store, "imready4", day, now_ts, apply=apply)
+
+
+def _describe(result: dict) -> str:
+    if result["action"] in ("written", "would write"):
+        return (f"{result['advice']} ({result['zone']}; HRV z {result['z_hrv']:+.2f}, "
+                f"resting HR z {result['z_resting_hr']:+.2f})")
+    if result["action"] == "keep":
+        return f"{result['advice']} computed, the field already holds {result['intervals_value']} - kept"
+    return result["action"] + (f" ({result['reason']})" if result.get("reason") else "")
 
 
 def morning(settings: Any, intervals: Any, store: Any, day: date, now: datetime, *, apply: bool) -> dict:
-    """Today's advice, called by wellness_check once the night's values have been read.
-
-    Final for the day once written, kept (a value was there), skipped (day locked, no
-    field, not enough history, no variability) or given up at GIVE_UP_HOUR; until then
-    a day whose own HRV or resting HR is not in Intervals yet is tried again later.
-    Dry runs report once a day and write nothing.
-    """
-    now_ts = now.timestamp()
-    tries = int(store.get_meta(f"imready4:tries:{day}") or 0)
-
-    def later(reason: str) -> dict:
-        if now.hour >= GIVE_UP_HOUR:
-            return final({"action": "gave up", "reason": reason})
-        store.set_meta(f"imready4:tries:{day}", str(tries + 1))
-        store.set_meta(f"imready4:next:{day}", str(now_ts + RETRY_MINUTES[min(tries, len(RETRY_MINUTES) - 1)] * 60))
-        return {"action": "wait", "reason": reason}
-
-    def final(result: dict) -> dict:
-        if apply:
-            store.set_meta(f"imready4:{day}", json.dumps({**result, "at": now.isoformat(timespec="seconds")}))
-        else:
-            store.set_meta(f"imready4:dry:{day}", json.dumps(result))
-        return result
-
-    problem = field_problem(find_field(intervals))
-    if problem:
-        log.warning("ImReady4: %s", problem)
-        return final({"action": "no field", "reason": problem})
-    try:
+    """Today's advice, called by wellness_check once the night's values have been read."""
+    def compute() -> dict:
+        problem = field_problem(find_field(intervals))
+        if problem:
+            log.warning("ImReady4: %s", problem)
+            return {"action": "no field", "reason": problem}
         records = history(intervals, day, day)
         advice = advise(records, day, day)
         record = next((r for r in records if str(r.get("id")) == day.isoformat()), {"id": day.isoformat()})
-        result = apply_day(intervals, day, advice, record, apply=apply)
-    except Exception as exc:                       # Intervals trouble: the next check tries again
-        log.warning("ImReady4 advice for %s not done: %s; trying again later", day, type(exc).__name__)
-        return later(type(exc).__name__)
-    if result["action"] == "wait":
-        log.info("ImReady4 advice for %s waits: %s", day, advice.reason)
-        return later(advice.reason or "waiting")
-    if result["action"] in ("written", "would write"):
-        log.info("ImReady4 advice for %s: %s (%s; HRV z %+.2f, resting HR z %+.2f)%s", day, advice.advice,
-                 advice.zone, advice.z_hrv, advice.z_resting_hr, "" if apply else " - dry run, not written")
-    elif result["action"] == "keep":
-        log.info("ImReady4 advice for %s: %s computed, the field already holds %s - kept", day, advice.advice,
-                 result["intervals_value"])
-    else:
-        log.info("ImReady4 advice for %s: %s%s", day, result["action"],
-                 f" ({advice.reason})" if advice.reason else "")
-    return final({k: result.get(k) for k in ("action", "value", "advice", "code", "z_hrv", "z_resting_hr",
-                                             "intervals_value", "reason") if result.get(k) is not None})
+        return apply_day(intervals, day, advice, record, apply=apply)
+
+    result = advice_rules.morning(store, "imready4", "ImReady4 advice", day, now, apply=apply, compute=compute,
+                                  describe=_describe)
+    return {k: result.get(k) for k in ("action", "value", "advice", "code", "z_hrv", "z_resting_hr",
+                                       "intervals_value", "reason") if result.get(k) is not None}
