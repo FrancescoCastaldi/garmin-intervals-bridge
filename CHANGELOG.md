@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Swap mode** (`BRIDGE_SWAP=true`, off by default): the official import stays on as
+  the trigger; within a minute the bridge uploads the device's original, carries name,
+  description, paired workout, type, RPE, feel, tags, gear and flags over, and deletes
+  Garmin's filtered copy. Intervals then holds the complete file – *Reprocess file*
+  keeps everything, and it is your own upload, not Garmin-sourced data. Guarded: only
+  Garmin's import, within `BRIDGE_SWAP_HOURS` (48), never with comments or hand-edited
+  intervals, upload first and delete last, a failed delete is tried again.
+  `swap <id or link> [--apply]` for one activity by hand.
+
 ## 0.8.1 — 2026-10-12
 
 One activity again, the easy way – thanks @DarKen.

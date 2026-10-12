@@ -470,8 +470,16 @@ def sync_enrich(settings: Settings, garmin: Any, intervals: Any, store: Store, *
                     time.sleep(pause_seconds)
                 store.clear_failure(gid)
                 continue
-            result = enrich_activity(gid, garmin, intervals, store, apply=apply,
-                                     remote_candidates=remote, mappings=mappings)
+            result = None
+            copy = next((c for c in remote if str(c.get("source") or "").upper() == "GARMIN_CONNECT"
+                         and str(c.get("external_id") or "") == gid), None)
+            if getattr(settings, "swap", False) and copy is not None and not date_range:
+                swapped = _try_swap(settings, gid, str(copy["id"]), garmin, intervals, store, metrics, apply=apply)
+                if swapped:
+                    result = {"outcome": "swapped", "intervals_id": swapped}
+            if result is None:
+                result = enrich_activity(gid, garmin, intervals, store, apply=apply,
+                                         remote_candidates=remote, mappings=mappings)
             asked = _complete_archive(gid, activity, garmin, store, metrics) != "on_disk"
             _complete_intake(gid, activity, result.get("intervals_id"), garmin, intervals, store, metrics,
                              apply=apply)
@@ -486,6 +494,8 @@ def sync_enrich(settings: Settings, garmin: Any, intervals: Any, store: Store, *
             continue
         store.clear_failure(gid)
         outcome = result["outcome"]
+        if outcome == "swapped":
+            continue                                   # counted by _try_swap
         metrics[outcome] += 1
         if outcome == "unmatched":
             log.info("Activity %s has no Intervals counterpart yet; will look again next run", gid)
@@ -920,6 +930,31 @@ def wellness_check(settings: Settings, garmin: Any, intervals: Any, store: Store
     return metrics
 
 
+def _try_swap(settings: Any, gid: str, iid: str, garmin: Any, intervals: Any, store: Store, metrics: dict, *,
+              apply: bool) -> str | None:
+    """Swap mode: the original for Garmin's copy. The Intervals id the activity has now when the
+    swap took it (or planned it); None when the copy stays and is completed as usual."""
+    from .swap import swap_activity
+    try:
+        result = swap_activity(gid, iid, garmin, intervals, store, apply=apply, window_hours=settings.swap_hours)
+    except GarminBlocked:
+        raise
+    except Exception as exc:                 # before the upload: nothing changed; the copy is completed
+        log.warning("Swap of %s not done (%s); completing Garmin's copy instead", gid, _error_name(exc))
+        return None
+    outcome = result["outcome"]
+    metrics[f"swap_{outcome}"] = metrics.get(f"swap_{outcome}", 0) + 1
+    if outcome in ("kept", "same"):
+        if outcome == "kept":
+            log.info("Swap: %s stays Garmin's copy: %s", iid, result["reason"])
+        return None
+    if outcome == "planned":
+        log.info("DRY-RUN would swap %s: Garmin's copy %s for the original (carrying %s)", gid, iid,
+                 result["carry"])
+        return iid
+    return result.get("new_id") or iid
+
+
 def watch_once(settings: Settings, garmin: Any, intervals: Any, store: Store, *, apply: bool,
                today: date | None = None) -> dict:
     """One cheap poll of Intervals; Garmin is contacted only for activities seen for the first time.
@@ -932,6 +967,9 @@ def watch_once(settings: Settings, garmin: Any, intervals: Any, store: Store, *,
     then too, instead of waiting for the next full scan.
     """
     current = today or datetime.now(settings.timezone).date()
+    if getattr(settings, "swap", False) and apply:
+        from .swap import retry_deletes
+        retry_deletes(intervals, store)                # copies whose delete failed last time
     recent = intervals.activities(current - timedelta(days=2), current + timedelta(days=1),
                                   fields=["id", "external_id", "source", "start_date"], limit=50)
     metrics = {"polled": len(recent), "new": 0, "ignored": 0, "failed": 0,
@@ -955,6 +993,10 @@ def watch_once(settings: Settings, garmin: Any, intervals: Any, store: Store, *,
             continue
         if store.is_deferred(external):
             continue
+        if getattr(settings, "swap", False):
+            done = _try_swap(settings, external, iid, garmin, intervals, store, metrics, apply=apply)
+            if done:
+                continue
         try:
             result = enrich_activity(external, garmin, intervals, store, apply=apply, intervals_id=iid)
         except GarminBlocked:

@@ -173,16 +173,20 @@ class IntervalsClient:
                 time.sleep(wait)
         return None
 
-    def upload_fit(self, garmin_id: str, path: Path) -> dict:
+    def upload_fit(self, garmin_id: str, path: Path, **extra: Any) -> dict:
         """An Intervals upload returns 201 if an activity was created, 200 otherwise.
 
         The response is normally an array, not an Activity object. This method
         deliberately distinguishes 'created' from 'accepted but not created'.
+        `extra`: name, description, paired_event_id for the new activity (the swap).
         """
+        params = {"external_id": f"garmin:{garmin_id}"}
+        params.update({k: v for k, v in extra.items() if k in ("name", "description", "paired_event_id")
+                       and v not in (None, "")})
         with path.open("rb") as f:
             response = self.session.post(
                 f"{self.base}/activities",
-                params={"external_id": f"garmin:{garmin_id}"},
+                params=params,
                 files={"file": (path.name, f, "application/octet-stream")},
                 timeout=(10, 75),
             )
@@ -206,6 +210,14 @@ class IntervalsClient:
         if response.status_code == 201 and not items:
             raise ValueError("Intervals returned 201 with no created activities")
         return {"created": response.status_code == 201, "items": items}
+
+    def delete_activity(self, activity_id: str) -> None:
+        """Only the swap uses this: Garmin's filtered copy, once its original is in."""
+        self._api("DELETE", f"/activity/{_activity_id(activity_id)}")
+
+    def activity_messages(self, activity_id: str) -> list[dict]:
+        out = self._api("GET", f"/activity/{_activity_id(activity_id)}/messages")
+        return out if isinstance(out, list) else []
 
     def athlete(self) -> dict:
         """The athlete the key belongs to (name, id); `setup` checks a key with it."""

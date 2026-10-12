@@ -202,6 +202,8 @@ class Settings:
     smtp_from: str | None = None
     ntfy_url: str | None = field(default=None, repr=False)        # the topic is the secret
     ntfy_token: str | None = field(default=None, repr=False)
+    swap: bool = False
+    swap_hours: int = 48
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -252,6 +254,8 @@ class Settings:
             smtp_from=_text("BRIDGE_SMTP_FROM"),
             ntfy_url=_text("BRIDGE_NTFY_URL"),
             ntfy_token=_text("BRIDGE_NTFY_TOKEN"),
+            swap=_flag("BRIDGE_SWAP"),
+            swap_hours=_positive_int("BRIDGE_SWAP_HOURS", 48, 24 * 30),
         )
 
     def ensure_data_dir(self) -> None:

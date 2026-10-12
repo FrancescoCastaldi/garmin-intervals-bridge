@@ -214,6 +214,11 @@ class Store:
         row = self.db.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
         return row[0] if row else None
 
+    def meta_items(self, pattern: str) -> list[tuple[str, str]]:
+        """Bookkeeping keys matching a GLOB `pattern`, with their values."""
+        return [(str(k), str(v or "")) for k, v in
+                self.db.execute("SELECT key, value FROM meta WHERE key GLOB ?", (pattern,))]
+
     def delete_meta(self, pattern: str, older_than: float) -> int:
         """Remove bookkeeping keys matching a GLOB `pattern` last touched before `older_than`."""
         cursor = self.db.execute("DELETE FROM meta WHERE key GLOB ? AND updated < ?", (pattern, older_than))

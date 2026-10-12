@@ -80,6 +80,11 @@ def build_parser() -> argparse.ArgumentParser:
                                            "Intervals' 'Reprocess file' (dry run unless --apply; works next to "
                                            "a running bridge)")
     enrich.add_argument("activity", nargs="?", help="The Intervals activity: its id (i12345678) or its link")
+    swap = sub.add_parser("swap", help="Replace Garmin's filtered copy of one activity by its original: upload "
+                                       "the original, carry name, workout, RPE ... over, then delete the copy "
+                                       "(dry run unless --apply; BRIDGE_SWAP=true does it for every new one)")
+    swap.add_argument("activity", help="The Intervals activity: its id (i12345678) or its link")
+    swap.add_argument("--apply", action="store_true", help="Actually upload and delete")
     enrich.add_argument("--activity-id", help="Garmin Connect activity ID")
     enrich.add_argument("--intervals-id", help="Same as ACTIVITY")
     enrich.add_argument("--apply", action="store_true", help="Actually PUT fields and streams")
@@ -440,7 +445,7 @@ def main(argv: list[str] | None = None) -> int:
                        # gear touches only the gear field: next to a running `run`, only not twice at once
                        else ("gear",) if args.cmd == "gear"
                        # one activity on request: next to a running `run`, writes are idempotent
-                       else ("enrich",) if args.cmd == "enrich"
+                       else ("enrich",) if args.cmd in ("enrich", "swap")
                        else ("imready4",) if args.cmd == "imready4"
                        else ("hrvtrend",) if args.cmd == "hrvtrend"
                        # read-only diagnosis must work next to a running `run`: no shared state written
@@ -585,6 +590,13 @@ def main(argv: list[str] | None = None) -> int:
                                            refresh_own=True, recheck=True)
                     print(json.dumps(plan, indent=2, default=str))
                     return 0
+                if args.cmd == "swap":
+                    from .swap import swap_activity
+                    intervals = IntervalsClient(settings.intervals_api_key, settings.intervals_athlete_id)
+                    gid, iid = resolve_one(intervals, args.activity)
+                    out = swap_activity(gid, iid, garmin, intervals, store, apply=args.apply, window_hours=None)
+                    print(json.dumps(out, indent=2, default=str))
+                    return 0 if out["outcome"] in ("planned", "swapped", "same") else 1
                 if args.cmd == "probe":
                     if args.activity_id:
                         gid = args.activity_id
