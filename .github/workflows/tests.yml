@@ -49,5 +49,9 @@ jobs:
           $bridge autostart --dry-run
           $bridge autostart
           $bridge autostart --status
+          # the background bridge itself starts (no window, no terminal) and writes its log file
+          for i in $(seq 1 45); do grep -q "running (enrich mode)" "$RUNNER_TEMP/GarminBridge/bridge.log" 2>/dev/null && break; sleep 2; done
+          cat "$RUNNER_TEMP/GarminBridge/bridge.log"
+          grep -q "running (enrich mode)" "$RUNNER_TEMP/GarminBridge/bridge.log"
           $bridge autostart --remove
           ! $bridge autostart --status
