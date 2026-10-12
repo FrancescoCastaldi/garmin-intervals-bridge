@@ -15,7 +15,7 @@
 > can write ImReady4's daily training advice for you, backfills the past, and comes with 20
 > charts for all of it in Intervals' chart library. Runs on
 > Linux (systemd timers), in a container, or on **Windows or a Mac with a few copy-and-paste
-> commands** (guides for [Windows](docs/WINDOWS.md) and [Mac](docs/MAC.md)).
+> commands** (guides for [Windows](docs/WINDOWS.md), [Mac](docs/MAC.md) and [Synology](docs/SYNOLOGY.md)).
 
 <p align="center">
 <img src="https://raw.githubusercontent.com/futureweb/garmin-intervals-bridge/main/docs/images/activity-fields.png" alt="Activity fields filled from the original FIT: training effect, VO2max, performance condition, recovery time, stamina, sweat loss" width="900"><br>
@@ -370,7 +370,7 @@ keep the 30-minute unit for wellness.
 **Docker / Podman:** a ready-made image is on the GitHub Container Registry,
 `ghcr.io/futureweb/garmin-intervals-bridge`, and on Docker Hub,
 `futurewebat/garmin-intervals-bridge` (for NAS boxes whose container manager
-only knows Docker Hub, e.g. Synology). Tags `latest` and the version, amd64
+only knows Docker Hub, e.g. Synology – step by step in [docs/SYNOLOGY.md](docs/SYNOLOGY.md)). Tags `latest` and the version, amd64
 and arm64. It runs as a non-root user and takes the same environment
 variables; without compose:
 

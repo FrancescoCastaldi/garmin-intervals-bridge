@@ -224,8 +224,15 @@ class Store:
         row = self.db.execute("SELECT 1 FROM intervals_seen WHERE intervals_id=?", (intervals_id,)).fetchone()
         return row is not None
 
+    def intervals_seen_source(self, intervals_id: str) -> str | None:
+        """The source an Intervals activity had when the watch last saw it; None if never seen."""
+        row = self.db.execute("SELECT source FROM intervals_seen WHERE intervals_id=?", (intervals_id,)).fetchone()
+        return None if row is None else str(row[0] or "")
+
     def mark_intervals_seen(self, intervals_id: str, external_id: str | None, source: str | None) -> None:
-        self.db.execute("INSERT OR IGNORE INTO intervals_seen VALUES (?,?,?,?)",
+        """Remember an activity (or its new source and external id); when it was first seen stays."""
+        self.db.execute("INSERT INTO intervals_seen VALUES (?,?,?,?) ON CONFLICT(intervals_id) DO UPDATE SET "
+                        "external_id=excluded.external_id, source=excluded.source",
                         (intervals_id, external_id, source, time.time()))
         self.db.commit()
 

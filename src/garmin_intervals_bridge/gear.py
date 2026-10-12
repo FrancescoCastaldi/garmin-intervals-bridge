@@ -338,6 +338,8 @@ def build_plan(store: Any, intervals: Any, *, start: date | None = None, end: da
 
     # gear to create: unpaired Garmin gear (used in the window or listed in the account snapshot)
     to_create = []
+    retired_left = sorted(g["name"] for u, g in garmin_gear.items()
+                          if why.get(u) == "not in Intervals" and g["retired"] and not include_retired)
     if create:
         used_by = defaultdict(list)
         for a in garmin_acts:
@@ -430,6 +432,7 @@ def build_plan(store: Any, intervals: Any, *, start: date | None = None, end: da
             "pairs": pairs, "unpaired": why, "intervals_only": dict(intervals_only), "skipped": dict(skipped),
             "touched": touched, "signatures": {k: sorted(list(x) for x in v) for k, v in signatures.items()},
             "before_purchase": dict(before_purchase),
+            "retired_not_created": retired_left if create else [],
             "_names": {**{k: g.get("name") for k, g in intervals_gear.items()},
                        **{f"new:{c['uuid']}": c["payload"]["name"] for c in to_create}},
             "_garmin": {u: g["name"] for u, g in garmin_gear.items()}}
@@ -541,6 +544,10 @@ def report(plan: dict, details: bool = False) -> dict:
         out["before_purchase"] = {"note": "activities carrying gear from before its purchase date: Intervals leaves "
                                           "them out of the gear's totals (an older pair of skis?)",
                                   **plan["before_purchase"]}
+    if plan.get("retired_not_created"):
+        out["retired_not_created"] = {
+            "gear": plan["retired_not_created"],
+            "hint": "retired Garmin gear is only created with --include-retired (retired, with its dates)"}
     if plan.get("without_gear_info"):
         out["hint"] = ("activities archived without their gear: `backfill --scope activities --from DATE "
                        "--archive-only` reads it (one Garmin request each)")

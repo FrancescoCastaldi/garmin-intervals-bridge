@@ -926,7 +926,10 @@ def watch_once(settings: Settings, garmin: Any, intervals: Any, store: Store, *,
 
     Intervals offers no push. Polling it every minute costs one ~450-byte request;
     the official import then triggers exactly one original download per new
-    Garmin activity, typically within a minute of the activity appearing.
+    Garmin activity, typically within a minute of the activity appearing. An
+    activity seen before as someone else's copy (Strava's, typically, when it
+    arrived first) that Intervals has since turned into Garmin's own is taken up
+    then too, instead of waiting for the next full scan.
     """
     current = today or datetime.now(settings.timezone).date()
     recent = intervals.activities(current - timedelta(days=2), current + timedelta(days=1),
@@ -935,10 +938,16 @@ def watch_once(settings: Settings, garmin: Any, intervals: Any, store: Store, *,
                "enriched": 0, "planned": 0, "nothing_to_add": 0, "already_enriched": 0, "unmatched": 0}
     for item in recent:
         iid = str(item.get("id") or "")
-        if not iid or store.intervals_seen(iid):
+        if not iid:
             continue
         external = str(item.get("external_id") or "")
         source = str(item.get("source") or "")
+        seen_as = store.intervals_seen_source(iid)
+        if seen_as is not None:
+            if seen_as.upper() == "GARMIN_CONNECT" or source.upper() != "GARMIN_CONNECT":
+                continue
+            log.info("Watch: %s is Garmin's own copy now (was %s); enriching it", iid, seen_as or "unknown")
+            metrics["switched"] = metrics.get("switched", 0) + 1
         store.mark_intervals_seen(iid, external, source)
         metrics["new"] += 1
         if source.upper() != "GARMIN_CONNECT" or not external.isdecimal():

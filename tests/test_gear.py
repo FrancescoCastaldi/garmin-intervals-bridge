@@ -247,3 +247,16 @@ def test_gear_runs_next_to_a_running_bridge(tmp_path, monkeypatch, capsys):
     with single_instance(tmp_path, ("activities", "wellness")):                # what `run` holds
         assert cli.main(["gear"]) == 0
     assert json.loads(capsys.readouterr().out)["apply"] is False
+
+
+def test_retired_garmin_gear_is_pointed_out_and_created_on_request(tmp_path):
+    st, iv = scene(tmp_path)
+    archive(st, "108", "2023-01-02", "hiking", [OLD_SHOES])
+    iv.remote.append(remote("i108", "108", "2023-01-02"))
+    out = gear.report(gear.build_plan(st, iv, create=True))
+    assert out["retired_not_created"]["gear"] == ["Salewa Wildfire"] and "--include-retired" in \
+        out["retired_not_created"]["hint"]
+    plan = gear.build_plan(st, iv, create=True, include_retired=True)
+    assert {"name": "Salewa Wildfire", "type": "Shoes", "purchased": "2020-09-11", "retired": "2024-06-06"} in \
+        [c["payload"] for c in plan["create"]] and not plan["retired_not_created"]
+    st.close()

@@ -120,3 +120,23 @@ def test_yesterday_is_fetched_once_more_after_midnight(tmp_path):
     st.mark_wellness(yesterday)                           # fetched again after midnight
     assert st.wellness_recent(yesterday, 8, since=midnight_later_than_fetch) is True
     st.close()
+
+
+def test_a_strava_copy_that_becomes_garmins_own_is_enriched_at_once(tmp_path):
+    class Switching(IntervalsFake):
+        source = "STRAVA"
+
+        def activities(self, start, end, fields=None, limit=None):
+            if self.source == "STRAVA":
+                return [{"id": "i42", "source": "STRAVA", "external_id": "18234567"}]
+            return [{"id": "i42", "source": "GARMIN_CONNECT", "external_id": "42"}]
+
+    st, g, i = Store(tmp_path), GarminFake(), Switching()
+    m = watch_once(settings(tmp_path), g, i, st, apply=True, today=date(2026, 10, 8))
+    assert m["ignored"] == 1 and g.downloads == 0                       # Strava's copy: not ours
+    i.source = "GARMIN_CONNECT"                                         # Intervals replaced it with Garmin's
+    m = watch_once(settings(tmp_path), g, i, st, apply=True, today=date(2026, 10, 8))
+    assert m["switched"] == 1 and m["enriched"] == 1 and g.downloads == 1
+    m = watch_once(settings(tmp_path), g, i, st, apply=True, today=date(2026, 10, 8))
+    assert m["new"] == 0 and g.downloads == 1                            # once
+    st.close()

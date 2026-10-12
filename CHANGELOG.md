@@ -18,9 +18,17 @@
 
 - ImReady4 and the trend advice share their write and once-a-morning rules
   (`advice.py`); ImReady4's behaviour is unchanged.
+- An activity the watch first saw as Strava's copy and that Intervals then
+  replaced with Garmin's is enriched within the minute, no longer only by the
+  next full scan (up to two hours later).
+- The `gear` plan names retired Garmin gear that `--create` leaves out, and
+  how to add it (`--include-retired`).
 
 ### Documentation
 
+- A step-by-step guide for Synology NAS (Container Manager), after @DarKen's
+  write-up: the container, the Garmin login in its terminal while it runs, gear,
+  the one-off history backfill, updating (`docs/SYNOLOGY.md`).
 - The Windows guide starts the bridge with `py -m garmin_intervals_bridge`
   everywhere, `run-bridge.cmd` included: Windows' Smart App Control blocks the
   unsigned `garmin-intervals-bridge.exe` launcher pip creates (issue #5);

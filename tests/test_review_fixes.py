@@ -544,3 +544,25 @@ def test_gap_runs_while_a_long_running_bridge_holds_every_lock(tmp_path, monkeyp
     with single_instance(tmp_path, ("activities", "wellness")):            # e.g. `run` in a container
         assert main(["gap", "--activity-id", "42", "--intervals-id", "i1"]) == 0
     assert '"matched"' in capsys.readouterr().out
+
+
+def test_login_works_next_to_a_running_bridge(tmp_path, monkeypatch):
+    # a container: `run` holds its locks, the terminal signs in to Garmin meanwhile
+    from garmin_intervals_bridge import cli
+    from garmin_intervals_bridge.store import single_instance
+    monkeypatch.setenv("BRIDGE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("GARMIN_TOKEN_DIR", str(tmp_path / "tokens"))
+    monkeypatch.setenv("INTERVALS_API_KEY", "not-a-real-key")
+    logins = []
+
+    class Garmin:
+        def __init__(self, *a, **k):
+            pass
+
+        def login(self, interactive=False):
+            logins.append(interactive)
+
+    monkeypatch.setattr(cli, "GarminSource", Garmin)
+    with single_instance(tmp_path, ("activities", "wellness")):
+        assert cli.main(["login"]) == 0
+    assert logins == [True]
