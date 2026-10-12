@@ -569,7 +569,9 @@ def enrich_activity(gid: str, garmin: Any, intervals: Any, store: Any, *, apply:
     remote_streams = intervals.streams(intervals_id, ["time", "heartrate", "cadence"])
     time_stream = next((st.get("data") for st in remote_streams
                         if isinstance(st, dict) and st.get("type") == "time"), []) or []
-    refresh = set(previous["streams"]) if (refresh_own and previous) else None
+    # only into the activity they went to: after a swap Intervals computes them from the original
+    refresh = (set(previous["streams"]) if (refresh_own and previous and previous["intervals_id"] == intervals_id)
+               else None)
     scalars = plan_scalars(messages, remote, mappings, partner_messages)
     streams = plan_streams(messages, remote, time_stream, mappings, refresh=refresh)
     check = origin_check(messages.get("record", []), time_stream, remote_streams)

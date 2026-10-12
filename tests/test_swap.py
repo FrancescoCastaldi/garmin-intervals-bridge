@@ -157,3 +157,18 @@ def test_watch_swaps_new_imports_when_swap_mode_is_on_and_completes_kept_ones(tm
     m = watch_once(settings, GarminFake(), i, st, apply=True, today=date(2026, 10, 8))
     assert m["swap_kept"] == 1 and m["enriched"] == 1                                    # completed instead
     st.close()
+
+
+def test_enrich_after_a_swap_rewrites_no_streams_into_the_original(tmp_path, monkeypatch):
+    from garmin_intervals_bridge import enrich
+    st, g, i = Store(tmp_path), GarminFake(), SwapIntervals()
+    st.record_enrichment("42", "i42", "old-sha", ["AerobicEffect"], ["Stamina"])      # the copy was enriched
+    swap_activity("42", "i42", g, i, st, apply=True, now=NOW)
+    seen = []
+    real = enrich.plan_streams
+    monkeypatch.setattr(enrich, "plan_streams", lambda *a, **k: seen.append(k.get("refresh")) or real(*a, **k))
+    i.activity_obj = {**i.created["i99"], "stream_types": ["time"]}
+    i.activity_file = lambda iid: build_fit(records=3, training_effect=3.2)          # Intervals holds the original
+    enrich.enrich_activity("42", g, i, st, apply=False, intervals_id="i99", refresh_own=True, recheck=True)
+    assert seen == [None]                          # the copy's streams are not "own streams" of the original
+    st.close()
