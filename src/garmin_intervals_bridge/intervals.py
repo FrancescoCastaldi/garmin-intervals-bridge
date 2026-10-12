@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,15 @@ from .mapping import CUSTOM_FIELDS
 log = logging.getLogger(__name__)
 
 RETRY_AFTER_CAP_SECONDS = 30
+WRITE_RETRIES = 3                  # a wellness PUT answered with 429 is sent again after the wait
+
+
+def _retry_after(response: Any, attempt: int) -> float:
+    try:
+        value = float(response.headers.get("Retry-After"))
+    except (AttributeError, TypeError, ValueError):
+        value = 5.0 * 2 ** attempt
+    return max(1.0, min(value, RETRY_AFTER_CAP_SECONDS))
 
 
 class _CappedRetry(Retry):
@@ -147,9 +157,21 @@ class IntervalsClient:
         return records
 
     def write_wellness(self, day: date, changes: dict) -> Any:
+        """PUT the changed fields of one day. Intervals' rate limit (429) is waited out and the same
+        body sent again - safe, it sets the same values; any other error fails as before."""
         if not changes:
             return None
-        return self._request("PUT", f"/wellness/{day.isoformat()}", json=changes)
+        for attempt in range(WRITE_RETRIES + 1):
+            try:
+                return self._request("PUT", f"/wellness/{day.isoformat()}", json=changes)
+            except requests.HTTPError as exc:
+                response = getattr(exc, "response", None)
+                if attempt == WRITE_RETRIES or getattr(response, "status_code", None) != 429:
+                    raise
+                wait = _retry_after(response, attempt)
+                log.info("Intervals asks to slow down (429); writing %s again in %.0f s", day, wait)
+                time.sleep(wait)
+        return None
 
     def upload_fit(self, garmin_id: str, path: Path) -> dict:
         """An Intervals upload returns 201 if an activity was created, 200 otherwise.

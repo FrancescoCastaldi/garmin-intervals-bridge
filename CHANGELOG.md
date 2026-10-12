@@ -19,6 +19,12 @@
 - ImReady4 and the trend advice share their write and once-a-morning rules
   (`advice.py`); ImReady4's behaviour is unchanged.
 
+### Fixed
+
+- Intervals' rate limit (HTTP 429) no longer ends a wellness write: the same
+  values are sent again after the wait Intervals asks for, and filling a range
+  of days (`imready4` / `hrvtrend --apply`) pauses briefly between writes.
+
 ## 0.6.0 — 2026-10-12
 
 ImReady4's training advice, written for you each morning – no more MATLAB Mobile step.

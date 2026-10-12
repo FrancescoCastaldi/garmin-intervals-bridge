@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import logging
 import math
+import time
 from collections import Counter
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta
@@ -247,6 +248,8 @@ def run_days(intervals: Any, start: date, end: date, *, apply: bool, overwrite: 
             results.append({**advice.explain(), "intervals_value": stored_value(record), "action": "no field"})
             continue
         results.append(apply_day(intervals, day, advice, record, apply=apply, overwrite=overwrite))
+        if results[-1]["action"] == "written":
+            time.sleep(advice_rules.WRITE_PAUSE)
     out: dict = {"apply": apply, "from": start.isoformat(), "to": end.isoformat()}
     if problem:
         out["field"] = problem

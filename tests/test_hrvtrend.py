@@ -107,7 +107,7 @@ def test_its_own_two_fields_are_created_only_on_apply_and_never_over_another_kin
     assert hrvtrend.ensure_fields(iv, apply=False) == ["HRVTrendAdvice", "HRVTrendCV"] and iv.created == []
     hrvtrend.ensure_fields(iv, apply=True)
     assert iv.created == ["HRVTrendAdvice", "HRVTrendCV"]
-    assert iv.items[0]["content"]["options"][2] == {"value": 3, "text": "Planned"}
+    assert iv.items[0]["content"]["options"][2] == {"value": 3, "text": "Planned", "color": "#00AB00"}
     assert hrvtrend.ensure_fields(iv, apply=True) == [] and len(iv.created) == 2      # once
     clash = Intervals([], items=[{"type": "INPUT_FIELD", "content": {"code": "HRVTrendAdvice", "type": "numeric"}}])
     with pytest.raises(ValueError, match="not a select"):

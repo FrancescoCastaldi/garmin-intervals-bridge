@@ -16,6 +16,7 @@ from typing import Any, Callable
 log = logging.getLogger(__name__)
 
 RETRY_MINUTES = (10, 30, 60, 120, 240)
+WRITE_PAUSE = 0.25               # seconds between writes when a range is filled (Intervals rate-limits)
 GIVE_UP_HOUR = 22                # no complete night by then: no advice for the day
 
 

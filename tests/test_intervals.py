@@ -111,3 +111,30 @@ def test_activity_upload_bad_current_response_fails_closed(tmp_path):
     path.write_bytes(b"synthetic test")
     with pytest.raises(ValueError, match="activities missing"):
         api.upload_fit("123", path)
+
+
+def test_a_wellness_write_answered_with_429_waits_and_is_sent_again(monkeypatch):
+    from garmin_intervals_bridge import intervals as module
+
+    class Limited(Response):
+        def __init__(self):
+            super().__init__(None, 429)
+            self.headers = {"Retry-After": "2"}
+
+        def raise_for_status(self):
+            raise requests.HTTPError("429 Too Many Requests", response=self)
+
+    class Session(FakeSession):
+        answers = [Limited(), Response({"id": "2026-10-08"})]
+
+        def request(self, method, url, **kwargs):
+            self.calls.append((method, url, kwargs))
+            return self.answers.pop(0)
+
+    waits = []
+    monkeypatch.setattr(module.time, "sleep", waits.append)
+    session = Session()
+    client = IntervalsClient("k", session=session)
+    assert client.write_wellness(date(2026, 10, 8), {"HRVTrendAdvice": 3}) == {"id": "2026-10-08"}
+    assert waits == [2.0] and [c[0] for c in session.calls] == ["PUT", "PUT"]
+    assert session.calls[0][2]["json"] == session.calls[1][2]["json"] == {"HRVTrendAdvice": 3}

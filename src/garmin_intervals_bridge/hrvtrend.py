@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import logging
 import math
+import time
 from collections import Counter
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta
@@ -47,6 +48,7 @@ log = logging.getLogger(__name__)
 FIELD = "HRVTrendAdvice"
 CV_FIELD = "HRVTrendCV"
 VALUES = {1: "Rest", 2: "LIT", 3: "Planned", 4: "HIT"}
+COLOURS = {1: "#FF0000", 2: "#FFAB00", 3: "#00AB00", 4: "#00FF00"}     # those of ImReady4's TrainingAdvice
 WEEK_DAYS, WEEK_MIN = 7, 5
 BASELINE_DAYS, BASELINE_MIN = 60, 30
 SWC = 0.5                                   # the band: baseline mean ± 0.5 SD
@@ -54,7 +56,7 @@ FIELD_ITEMS = {
     FIELD: {"name": "HRV Trend Advice", "type": "INPUT_FIELD", "visibility": "PRIVATE",
             "description": "Experimental training advice from the 7-day HRV trend, by garmin-intervals-bridge.",
             "content": {"code": FIELD, "name": "HRV Trend Advice", "type": "select",
-                        "options": [{"value": v, "text": t} for v, t in VALUES.items()]}},
+                        "options": [{"value": v, "text": t, "color": COLOURS[v]} for v, t in VALUES.items()]}},
     CV_FIELD: {"name": "HRV Trend CV", "type": "INPUT_FIELD", "visibility": "PRIVATE",
                "description": "7-day coefficient of variation of ln(rMSSD), by garmin-intervals-bridge.",
                "content": {"code": CV_FIELD, "name": "HRV Trend CV", "type": "numeric", "units": "%"}},
@@ -213,6 +215,8 @@ def run_days(intervals: Any, start: date, end: date, *, apply: bool, overwrite: 
         record = by_day.get(day.isoformat(), {"id": day.isoformat()})
         results.append(apply_day(intervals, day, advise(records, day, today), record, apply=apply,
                                  overwrite=overwrite))
+        if results[-1]["action"] == "written":
+            time.sleep(advice_rules.WRITE_PAUSE)
         day += timedelta(days=1)
     out: dict = {"apply": apply, "from": start.isoformat(), "to": end.isoformat()}
     if created:
