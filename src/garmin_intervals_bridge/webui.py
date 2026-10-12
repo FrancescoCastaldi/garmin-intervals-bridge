@@ -350,8 +350,9 @@ class UI:
                        settings.update_check)
                  + box("intervals_notes", "A note in my Intervals calendar when Garmin needs a new sign-in",
                        settings.intervals_notes)
-                 + box("swap", "Swap Garmin's filtered copy of each new activity for the original (deletes the copy, "
-                               "never one with comments; 'Reprocess file' then keeps everything)", settings.swap)
+                 + box("swap", "Swap Garmin's filtered copy of each new activity for the original (deletes the copy "
+                               "in Intervals, never one with comments, nothing on Garmin Connect; 'Reprocess file' "
+                               "then keeps everything)", settings.swap)
                  + '<label>Replace the Intervals API key (leave empty to keep it) <input type="password" '
                    'name="api_key" autocomplete="off"></label>'
                  + '<h2>When the bridge needs you</h2><p class="muted">Garmin wants a new sign-in, or the bridge '

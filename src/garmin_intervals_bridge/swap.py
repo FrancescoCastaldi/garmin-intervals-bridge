@@ -2,7 +2,8 @@
 
 The official import stays on and is the trigger: within a minute of a Garmin activity
 arriving in Intervals, the bridge uploads the device's original file as your own and
-then deletes Garmin's filtered copy. Intervals then holds the complete file – it
+then deletes the filtered copy Garmin's import created in Intervals (Garmin Connect is
+only ever read, never changed). Intervals then holds the complete file – it
 computes every custom field and stream itself, "Reprocess file" keeps them, and it is
 your upload, not Garmin-sourced data. Nothing to poll at Garmin: one original download
 per new activity, as in enrich mode; with the bridge down the copy simply stays (and is

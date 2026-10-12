@@ -188,7 +188,9 @@ on this mode *would* create duplicates. Use it only with the import off.
 stays on and is the trigger: within a minute of Garmin's filtered copy arriving, the
 bridge uploads the device's original as your own file, carries over what you may have
 set already (name, description, the paired workout, type, RPE, feel, tags, gear,
-commute/race, ignore settings), then **deletes Garmin's copy**. Intervals then holds
+commute/race, ignore settings), then **deletes the copy Garmin's import created in
+Intervals** – nothing on Garmin Connect is touched (the bridge only ever reads from
+Garmin). Intervals then holds
 the complete file: every custom field and stream is computed by Intervals itself,
 *Reprocess file* keeps them, no `icu_intervals_edited` flag, and it is your upload, not
 Garmin-sourced data. No polling of Garmin (one original download per new activity),
