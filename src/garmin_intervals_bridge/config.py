@@ -5,7 +5,28 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+
+def _timezone() -> tuple[ZoneInfo, str]:
+    """BRIDGE_TIMEZONE, else this computer's own zone (TZ, /etc/localtime, Windows' setting), else UTC.
+
+    The zone is the day boundary: which date last night's sleep and today's totals belong to.
+    """
+    name, source = os.getenv("BRIDGE_TIMEZONE", "").strip(), "BRIDGE_TIMEZONE"
+    if not name:
+        try:
+            from tzlocal import get_localzone_name
+            name, source = get_localzone_name() or "", "this computer"
+        except Exception:                      # no zone configured at all (a bare container)
+            name = ""
+    if not name:
+        name, source = "UTC", "fallback, nothing set"
+    try:
+        return ZoneInfo(name), source
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        raise ValueError(f"Unknown time zone {name!r} (from {source}): set BRIDGE_TIMEZONE to yours, "
+                         "e.g. Europe/London") from exc
 
 
 def _positive_int(name: str, default: int, max_value: int) -> int:
@@ -53,13 +74,14 @@ class Settings:
     garmin_request_delay: float
     wellness_profile: str = "recommended"
     stale_hours: int = 24
+    timezone_source: str = "BRIDGE_TIMEZONE"
 
     @classmethod
     def from_env(cls) -> "Settings":
         load_env_file()
         data_dir = Path(os.getenv("BRIDGE_DATA_DIR", "./data")).expanduser().resolve()
         token_dir = Path(os.getenv("GARMIN_TOKEN_DIR", str(data_dir / "tokens"))).expanduser().resolve()
-        tz = ZoneInfo(os.getenv("BRIDGE_TIMEZONE", "Europe/Vienna"))
+        tz, tz_source = _timezone()
         delay = float(os.getenv("BRIDGE_GARMIN_REQUEST_DELAY", "0.5"))
         if delay < 0.25:
             raise ValueError("BRIDGE_GARMIN_REQUEST_DELAY must be >= 0.25 seconds")
@@ -81,6 +103,7 @@ class Settings:
             garmin_request_delay=delay,
             wellness_profile=profile,
             stale_hours=_positive_int("BRIDGE_STALE_HOURS", 24, 24 * 30),
+            timezone_source=tz_source,
         )
 
     def ensure_data_dir(self) -> None:

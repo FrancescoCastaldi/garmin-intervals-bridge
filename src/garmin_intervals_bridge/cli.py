@@ -188,6 +188,10 @@ def run_loop(settings: Settings, store: Store, *, apply: bool, poll_seconds: int
     next_sync, next_health, count = 0.0, time.time() + 300, 0
     log.info("Running (%s mode): poll every %ds, full run every %d min, %s", mode, poll_seconds, sync_minutes,
              "writing to Intervals" if apply else "DRY RUN (add --apply to write)")
+    source = getattr(settings, "timezone_source", "BRIDGE_TIMEZONE")
+    (log.warning if source.startswith("fallback") else log.info)(
+        "Day boundary: %s (%s)%s", settings.timezone.key, source,
+        "; set BRIDGE_TIMEZONE to yours" if source.startswith("fallback") else "")
     while iterations is None or count < iterations:
         count += 1
         now = time.time()

@@ -72,6 +72,10 @@ def probe(settings: Any, garmin: Any, intervals: Any, store: Any, *, now: float 
                             name, type(exc).__name__, age / 3600, settings.stale_hours)
         report["services"][name] = entry
     report["findings"] += silent_error_checks(settings, store, now=now)
+    if str(getattr(settings, "timezone_source", "")).startswith("fallback"):
+        report["findings"].append({"alert": False, "what": "day boundary in UTC",
+                                   "detail": "no BRIDGE_TIMEZONE and no time zone on this computer (a container?): "
+                                             "set BRIDGE_TIMEZONE to yours, e.g. Europe/London"})
     for f in report["findings"]:
         (log.error if f["alert"] else log.warning)("%s: %s", f["what"], f["detail"])
     if any(f["alert"] for f in report["findings"]):
