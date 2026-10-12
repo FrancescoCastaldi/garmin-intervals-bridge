@@ -111,7 +111,7 @@ def archive_activity(gid: str, activity: dict, garmin: Any, store: Store, *, now
     return "archived"
 
 
-INTAKE_SETTLE_HOURS = 12      # a drink is logged after the ride: Garmin's summary is asked again once, later
+INTAKE_SETTLE_HOURS = 12      # drinks and gear are logged after the ride: Garmin is asked again once, later
 
 
 def complete_intake(gid: str, activity: dict, intervals_id: str | None, garmin: Any, intervals: Any, store: Store,
@@ -120,6 +120,8 @@ def complete_intake(gid: str, activity: dict, intervals_id: str | None, garmin: 
 
     The summary archived with the activity is reused when it was fetched late enough;
     otherwise it is asked for once more (one request), and the archive keeps the newer one.
+    The same goes for its gear, which many pick in the app after the run (one more request):
+    the archive gets the newer answer, and the gear sync takes it from there.
     Dry runs ask nothing: the first real run does it.
     """
     key = f"intake:{gid}"
@@ -140,12 +142,30 @@ def complete_intake(gid: str, activity: dict, intervals_id: str | None, garmin: 
     if summary is None:
         summary = garmin.activity(gid)
         store.save_activity_json(gid, summary)
+    extras = store.activity_extras_path(gid)
+    if extras.is_file() and extras.stat().st_mtime < started.timestamp() + INTAKE_SETTLE_HOURS * 3600:
+        _refresh_gear(gid, activity, garmin, store)
     values = intake_values(summary)
     written = write_intake(intervals_id, values, intervals, apply=apply)
     if written:
         metrics["intake_written"] = metrics.get("intake_written", 0) + 1
         log.info("Intake of %s -> %s: %s", gid, intervals_id, written)
     store.set_meta(key, json.dumps(values, sort_keys=True))
+
+
+def _refresh_gear(gid: str, activity: dict, garmin: Any, store: Store) -> None:
+    """The archived extras with Garmin's current gear of the activity; an error keeps the old answer."""
+    found = garmin.activity_extras(activity, keys=("gear",))
+    if "gear" in found.get("errors", {}):
+        return
+    try:
+        archived = json.loads(store.activity_extras_path(gid).read_text())
+    except (OSError, ValueError):
+        return
+    if archived.get("gear") != found["gear"]:
+        log.info("Gear of %s changed after the activity (picked later in the app)", gid)
+    errors = {k: v for k, v in (archived.get("errors") or {}).items() if k != "gear"}
+    store.save_activity_extras(gid, {**archived, "gear": found["gear"], "errors": errors})
 
 
 def _complete_intake(gid: str, activity: dict, intervals_id: str | None, garmin: Any, intervals: Any, store: Store,

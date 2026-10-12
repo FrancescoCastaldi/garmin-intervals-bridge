@@ -6,6 +6,10 @@
 
 - `run` names its version in the first log line (`garmin-intervals-bridge
   <version> running …`), so a container's log shows which image is running.
+- Gear picked in the Garmin Connect app after the run reaches Intervals: the
+  activity's gear is read once more half a day later, together with the
+  logged fluid and food (one Garmin request per activity), and the gear sync
+  takes it from there. Gear chosen on the watch arrived already.
 
 ## 0.5.1 — 2026-10-12
 

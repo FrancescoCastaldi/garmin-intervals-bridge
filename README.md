@@ -248,7 +248,8 @@ garmin-intervals-bridge gear …` (it does not wait for the running bridge).
   Intervals counts a gear only from its purchase date; the plan lists
   activities that carry gear from before it was bought (an older pair?).
 - **Afterwards** the scheduled runs keep the last week in line with the same
-  choices.
+  choices. Gear chosen on the watch comes with the activity; gear picked in
+  the Garmin Connect app after the run is read once more half a day later.
 - **History:** the bridge knows the gear of the activities in its archive —
   those since it started, plus what `backfill --scope activities --from DATE
   --archive-only` adds once (a few Garmin requests per activity; stop a

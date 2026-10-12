@@ -93,3 +93,38 @@ def test_the_past_is_filled_from_the_archive_by_garmins_activity_id(tmp_path):
     out = backfill_intake(i, st, start=date(2026, 9, 1), end=date(2026, 9, 30), apply=True)
     assert out["written"] == 1 and i.updates == [("i42", {"GarminFluidIntake": 2250, "GarminCaloriesConsumed": 1100})]
     st.close()
+
+
+class GarminWithGear(Garmin):
+    def __init__(self, gear):
+        super().__init__()
+        self.gear, self.gear_asked = gear, 0
+
+    def activity_extras(self, activity, keys=None):
+        assert keys == ("gear",)
+        self.gear_asked += 1
+        return {"gear": self.gear, "errors": {}}
+
+
+def test_gear_picked_in_the_app_after_the_run_is_read_again_half_a_day_later(tmp_path):
+    shoes = [{"uuid": "u1", "displayName": "Pegasus"}]
+    st, g, i = Store(tmp_path), GarminWithGear(shoes), Intervals()
+    activity = {"activityId": 42, "startTimeGMT": "2026-09-20 11:56:00"}
+    st.save_activity_json("42", {"summaryDTO": {}})
+    st.save_activity_extras("42", {"gear": [], "weather": {"temp": 12}, "errors": {}})   # archived before the pick
+    for path in (st.activity_json_path("42"), st.activity_extras_path("42")):
+        os.utime(path, (1, 1))
+    complete_intake("42", activity, "i1", g, i, st, {}, apply=True, now=datetime(2026, 9, 21, 7, 0, tzinfo=timezone.utc))
+    extras = json.loads(st.activity_extras_path("42").read_text())
+    assert g.gear_asked == 1 and extras["gear"] == shoes and extras["weather"] == {"temp": 12}
+    st.close()
+
+
+def test_gear_archived_late_enough_is_not_asked_again(tmp_path):
+    st, g, i = Store(tmp_path), GarminWithGear([]), Intervals()
+    activity = {"activityId": 42, "startTimeGMT": "2026-09-20 11:56:00"}
+    st.save_activity_json("42", {"summaryDTO": {}})
+    st.save_activity_extras("42", {"gear": [], "errors": {}})            # read today: already after the pick
+    complete_intake("42", activity, "i1", g, i, st, {}, apply=True, now=datetime(2026, 9, 21, 7, 0, tzinfo=timezone.utc))
+    assert g.gear_asked == 0
+    st.close()
