@@ -16,7 +16,9 @@ This is the one place the bridge deletes anything, so it is careful:
   - upload first, delete last: a failure leaves a duplicate to see, never a loss; an
     upload with an unknown outcome stays `pending` (health reports it) and deletes nothing
   - name, description, the paired workout, type, RPE, feel, tags, gear, commute/race
-    flags and ignore settings go over to the new activity
+    flags and ignore settings go over to the new activity, and so do the values of custom
+    activity fields without a script (nothing in the file computes them: the logged intake
+    the bridge writes from Garmin's summary, what you typed in yourself)
   - the original stays in the local archive either way
 """
 from __future__ import annotations
@@ -44,6 +46,17 @@ def _hours_since(value: Any, now: datetime) -> float | None:
     if when.tzinfo is None:
         when = when.replace(tzinfo=timezone.utc)
     return (now - when).total_seconds() / 3600
+
+
+def typed_fields(intervals: Any) -> set[str]:
+    """Custom activity fields Intervals cannot compute from the file: those without a script."""
+    return {str((item.get("content") or {}).get("code")) for item in intervals.custom_items()
+            if item.get("type") == "ACTIVITY_FIELD" and not str((item.get("content") or {}).get("script") or "").strip()
+            and (item.get("content") or {}).get("code")}
+
+
+def _value(value: Any) -> bool:
+    return value not in (None, "", [], False) and str(value) != "NaN"
 
 
 def why_not(copy: dict, gid: str, intervals: Any, store: Any, *, window_hours: float | None,
@@ -83,7 +96,7 @@ def swap_activity(gid: str, iid: str, garmin: Any, intervals: Any, store: Any, *
     digest = sha256(path.read_bytes())
     if digest == sha256(partner.read_bytes()):
         return {"outcome": "same", "intervals_id": iid, "reason": "Garmin sent the original itself"}
-    carry = {k: copy[k] for k in CARRY if copy.get(k) not in (None, "", [], False)}
+    carry = {k: copy[k] for k in (*CARRY, *sorted(typed_fields(intervals))) if _value(copy.get(k))}
     plan = {"outcome": "planned", "intervals_id": iid, "garmin_id": gid, "carry": sorted(carry),
             "paired_event_id": copy.get("paired_event_id")}
     if not apply:

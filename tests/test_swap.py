@@ -27,7 +27,8 @@ class SwapIntervals(IntervalsFake):
         super().__init__()
         self.activity_obj.update({"source": "GARMIN_CONNECT", "external_id": "42", "name": "Morning Ride",
                                   "description": "", "created": "2026-10-08T08:05:00Z", "icu_rpe": 6,
-                                  "paired_event_id": 77, "type": "Ride", "icu_intervals_edited": False})
+                                  "paired_event_id": 77, "type": "Ride", "icu_intervals_edited": False,
+                                  "GarminCaloriesConsumed": 1200, "Computed": 5, "LTPace": "NaN"})
         self.comments, self.calls, self.created, self.delete_status = [], [], {}, None
         self.upload_result = None
 
@@ -37,6 +38,11 @@ class SwapIntervals(IntervalsFake):
         if iid == "i42" and "delete i42" in self.calls:
             raise http_error(404)
         return dict(self.activity_obj)
+
+    def custom_items(self):
+        return super().custom_items() + [
+            {"type": "ACTIVITY_FIELD", "content": {"code": "GarminCaloriesConsumed", "type": "numeric"}},
+            {"type": "ACTIVITY_FIELD", "content": {"code": "Computed", "script": "activity.x"}}]
 
     def activity_messages(self, iid):
         return list(self.comments)
@@ -67,8 +73,9 @@ def test_swap_uploads_the_original_carries_the_athletes_values_then_deletes_the_
     assert out["outcome"] == "swapped" and out["new_id"] == "i99"
     upload, *rest = i.calls
     assert upload == ("upload", "42", {"name": "Morning Ride", "description": "", "paired_event_id": 77})
-    assert ("update", "i99", {"icu_rpe": 6}) in rest
-    assert rest.index("delete i42") > rest.index(("update", "i99", {"icu_rpe": 6}))     # delete last
+    carried = {"icu_rpe": 6, "GarminCaloriesConsumed": 1200}       # typed values, not the computed one
+    assert ("update", "i99", carried) in rest
+    assert rest.index("delete i42") > rest.index(("update", "i99", carried))           # delete last
     assert ("update", "i99", {"paired_event_id": 77}) in rest                            # paired again
     assert st.activity_status("42") == "uploaded" and st.intervals_seen_source("i99") == "UPLOAD"
     st.close()
