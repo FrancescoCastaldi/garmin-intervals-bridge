@@ -186,8 +186,8 @@ def run_loop(settings: Settings, store: Store, *, apply: bool, poll_seconds: int
     intervals = IntervalsClient(settings.intervals_api_key, settings.intervals_athlete_id)
     garmin = GarminSource(settings.token_dir, settings.garmin_request_delay)
     next_sync, next_health, count = 0.0, time.time() + 300, 0
-    log.info("Running (%s mode): poll every %ds, full run every %d min, %s", mode, poll_seconds, sync_minutes,
-             "writing to Intervals" if apply else "DRY RUN (add --apply to write)")
+    log.info("garmin-intervals-bridge %s running (%s mode): poll every %ds, full run every %d min, %s", __version__,
+             mode, poll_seconds, sync_minutes, "writing to Intervals" if apply else "DRY RUN (add --apply to write)")
     source = getattr(settings, "timezone_source", "BRIDGE_TIMEZONE")
     (log.warning if source.startswith("fallback") else log.info)(
         "Day boundary: %s (%s)%s", settings.timezone.key, source,

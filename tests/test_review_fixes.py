@@ -346,6 +346,20 @@ def _loop_settings(tmp_path):
                            stale_hours=24)
 
 
+def test_run_loop_says_which_version_and_day_boundary_it_runs_with(tmp_path, monkeypatch, caplog):
+    from garmin_intervals_bridge import __version__, cli
+    monkeypatch.setattr(cli, "sync_enrich", lambda *a, **k: {"seen": 0, "enriched": 0, "planned": 0, "scan_skipped": 1})
+    monkeypatch.setattr(cli, "sync_wellness", lambda *a, **k: {"days_checked": 0, "writes": 0})
+    settings = _loop_settings(tmp_path)
+    settings.timezone, settings.timezone_source = ZoneInfo("UTC"), "fallback, nothing set"
+    st = Store(tmp_path)
+    with caplog.at_level("INFO"):
+        cli.run_loop(settings, st, apply=False, poll_seconds=60, sync_minutes=30, iterations=1)
+    assert f"garmin-intervals-bridge {__version__} running" in caplog.text        # a container log shows the version
+    assert "Day boundary: UTC (fallback, nothing set); set BRIDGE_TIMEZONE" in caplog.text
+    st.close()
+
+
 def test_run_loop_does_a_full_run_then_polls(tmp_path, monkeypatch):
     from garmin_intervals_bridge import cli
     calls = []

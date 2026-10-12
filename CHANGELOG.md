@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- `run` names its version in the first log line (`garmin-intervals-bridge
+  <version> running …`), so a container's log shows which image is running.
+
 ## 0.5.1 — 2026-10-12
 
 Windows works again, and the day boundary is your own.
