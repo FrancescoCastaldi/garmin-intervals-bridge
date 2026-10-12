@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 — 2026-10-12
+
+ImReady4's training advice, written for you each morning – no more MATLAB Mobile step.
+
+Upgrading changes nothing until you switch it on: `BRIDGE_IMREADY4_ENABLED=true` (systemd env file,
+`-e` for a container, `.env` on Windows and the Mac), with the `TrainingAdvice` wellness field ImReady4
+uses. `garmin-intervals-bridge imready4` shows today's advice first; `imready4 --from DATE --compare`
+compares it with the values the field already holds.
 
 ### Added
 
