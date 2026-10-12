@@ -559,7 +559,7 @@ win. Relative paths in a settings file count from its folder.
 
 ## Security and privacy
 
-Read [SECURITY.md](SECURITY.md). In short: no passwords stored,
+Read [SECURITY.md](SECURITY.md) and [PRIVACY.md](PRIVACY.md). In short: no passwords stored,
 tokens and the API key readable by the service user only, the data
 directory is personal (routes, health data) and must never be committed or
 shared, dry run by default, no deletions ever. The bridge talks to Garmin
