@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.5.1 — 2026-10-12
+
+Windows works again, and the day boundary is your own.
+
+### Fixed
+
+- Windows: every command stopped at once with `ZoneInfoNotFoundError: No time
+  zone found with key Europe/Vienna` – Windows has no time zone database Python
+  can read. The bridge now brings one (`tzdata`).
+
+### Changed
+
+- Without `BRIDGE_TIMEZONE` the day boundary is this computer's own time zone
+  (via `tzlocal`), no longer Europe/Vienna for everyone. **Containers** have no
+  time zone of their own: set `BRIDGE_TIMEZONE` there (e.g. `Europe/London`),
+  otherwise the bridge uses UTC – it says so at the start of `run` and in the
+  daily health digest.
+
 ## 0.5.0 — 2026-10-11
 
 Your Garmin gear on the Intervals activities.

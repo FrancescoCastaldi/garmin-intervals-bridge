@@ -66,7 +66,7 @@ from Docker Hub or as a Claude Desktop bundle; [more below](#use-it-with-an-ai-c
 | **Rule** | Only what the partner copy lacks; aligned by timestamp; idempotent | Only empty values; locked days skipped; today's running totals wait until tomorrow |
 | **Archive** | Original + partner copy of every activity, Garmin's summary, weather, gear, splits | Raw JSON of every endpoint and the watch's original wellness files (Health Snapshots included), every day |
 
-Version 0.5.0. Verified end to end on one account (fenix 8, Edge 1040);
+Version 0.5.1. Verified end to end on one account (fenix 8, Edge 1040);
 the first live writes and the evidence are recorded in
 [docs/PLAN.md](docs/PLAN.md).
 
@@ -345,9 +345,13 @@ and arm64. It runs as a non-root user and takes the same environment
 variables; without compose:
 
 ```bash
-docker run --rm -it -v $PWD/data:/data -e INTERVALS_API_KEY=... ghcr.io/futureweb/garmin-intervals-bridge login
-docker run --rm    -v $PWD/data:/data -e INTERVALS_API_KEY=... ghcr.io/futureweb/garmin-intervals-bridge sync --apply
+docker run --rm -it -v $PWD/data:/data -e INTERVALS_API_KEY=... -e BRIDGE_TIMEZONE=Europe/London ghcr.io/futureweb/garmin-intervals-bridge login
+docker run --rm    -v $PWD/data:/data -e INTERVALS_API_KEY=... -e BRIDGE_TIMEZONE=Europe/London ghcr.io/futureweb/garmin-intervals-bridge sync --apply
 ```
+
+`BRIDGE_TIMEZONE` is your own zone (`Europe/London` above is an example): a
+container has no time zone of its own, and the zone decides which date last
+night's sleep and a day's totals belong to.
 
 ```bash
 cp .env.example .env            # fill INTERVALS_API_KEY
@@ -380,7 +384,7 @@ file named by `BRIDGE_ENV_FILE`); variables already set always win.
 | `INTERVALS_ATHLETE_ID` | `0` | `0` addresses the key's owner |
 | `BRIDGE_DATA_DIR` | `./data` | Originals, partner copies, raw wellness JSON, SQLite state, lock files |
 | `GARMIN_TOKEN_DIR` | `$BRIDGE_DATA_DIR/tokens` | Garmin session tokens (mode 0700) |
-| `BRIDGE_TIMEZONE` | `Europe/Vienna` | Your local day boundary |
+| `BRIDGE_TIMEZONE` | this computer's time zone | Your local day boundary (which date last night's sleep belongs to), e.g. `Europe/London`. A container has none of its own: set it there (otherwise UTC) |
 | `BRIDGE_ACTIVITY_LOOKBACK_DAYS` | `4` | `sync` window for activities (1–30) |
 | `BRIDGE_WELLNESS_LOOKBACK_DAYS` | `3` | `sync` window for wellness (1–30) |
 | `BRIDGE_WELLNESS_REFRESH_HOURS` | `4` | Backfills only: how soon a backfill re-reads today or yesterday. The scheduled runs read on evidence instead (see [Wellness](#wellness)) |

@@ -122,6 +122,8 @@ py -m pip install --upgrade garmin-intervals-bridge
 ## If something goes wrong
 
 - *"Garmin login needed"*: run `garmin-intervals-bridge login` again.
+- *"ZoneInfoNotFoundError: No time zone found"*: an older version; update it
+  (`py -m pip install --upgrade garmin-intervals-bridge`, see *Updating*).
 - *"Another bridge instance is running"*: a second window is already running
   `run`; close one.
 - Everything the bridge did is in the window; nothing is deleted on either

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "garmin-intervals-bridge"
-version = "0.5.0"
+version = "0.5.1"
 description = "Self-hosted Garmin Connect original FIT and wellness sync to Intervals.icu"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -21,7 +21,8 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Utilities",
 ]
-dependencies = ["garminconnect>=0.3.17,<0.4", "requests>=2.31,<3", "garmin-fit-sdk>=21.171"]
+dependencies = ["garminconnect>=0.3.17,<0.4", "requests>=2.31,<3", "garmin-fit-sdk>=21.171",
+                "tzdata>=2024.1", "tzlocal>=5.0"]       # Windows has no zone database of its own
 
 [project.urls]
 Homepage = "https://github.com/futureweb/garmin-intervals-bridge"
