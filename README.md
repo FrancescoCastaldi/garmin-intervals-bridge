@@ -374,8 +374,12 @@ Intervals, and the bridge uploads the **original, unfiltered FIT** of every
 new activity as your own file (`source: UPLOAD`, `external_id: garmin:<id>`).
 Intervals then computes everything from the complete file itself: Stamina
 streams, Recovery Time, VO₂max, Performance Condition, Training Effect,
-Sweat Loss and your other custom items appear without any enrichment, and no
-`icu_intervals_edited` flag is set. Wellness works the same in both modes.
+Sweat Loss and your other custom items appear without any enrichment, no
+`icu_intervals_edited` flag is set, and Intervals' *Reprocess file* keeps all of it.
+Wellness and gear work the same in both modes. Turn off a Strava connection's activity
+import as well: a Strava copy that arrives first blocks the original's upload. New
+activities arrive within ten minutes of Garmin's sync (the bridge asks Garmin every 10
+minutes, about 450 requests a day); activities imported before stay as they are.
 
 ```bash
 garmin-intervals-bridge sync --scope activities --mode upload --activity-days 2          # dry run

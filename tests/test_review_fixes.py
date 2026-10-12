@@ -581,3 +581,19 @@ def test_enrich_one_activity_runs_next_to_a_running_bridge(tmp_path, monkeypatch
         assert main(["enrich", "--intervals-id", "https://intervals.icu/activities/i42"]) == 0
     assert seen["gid"] == "42" and seen["intervals_id"] == "i42" and seen["recheck"] and seen["refresh_own"]
     assert main(["enrich"]) == 1                                                # names no activity
+
+
+def test_upload_mode_puts_the_gear_on_the_uploaded_originals_too(tmp_path, monkeypatch):
+    from garmin_intervals_bridge import cli
+    calls = []
+    monkeypatch.setattr(cli, "sync_activities", lambda *a, **k: calls.append("upload") or
+                        {"seen": 1, "uploaded": 1, "would_upload": 0})
+    monkeypatch.setattr(cli, "sync_wellness", lambda *a, **k: {"days_checked": 0, "writes": 0})
+    monkeypatch.setattr(cli, "wellness_check", lambda *a, **k: {})
+    monkeypatch.setattr(cli, "_gear_recent", lambda *a, **k: calls.append("gear") or {"checked": 1})
+    monkeypatch.setattr(cli.time, "sleep", lambda s: None)
+    st = Store(tmp_path)
+    cli.run_loop(_loop_settings(tmp_path), st, apply=True, poll_seconds=600, sync_minutes=30, iterations=2,
+                 mode="upload")
+    assert calls == ["upload", "gear", "upload", "gear"]               # full run, then a poll that uploaded
+    st.close()

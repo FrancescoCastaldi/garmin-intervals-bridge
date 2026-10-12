@@ -14,11 +14,14 @@ One activity again, the easy way – thanks @DarKen.
   the bridge added; a new custom field or stream for an older activity.
 - The web page's *Actions* do the same ("One activity again"), showing first what the
   activity gets.
+- Upload mode puts the Garmin gear on the uploaded originals too (it did only in enrich
+  mode).
 
 ### Documentation
 
 - *Reprocess file* and how to undo its effect (README, guides); Synology on older DSM
-  with the Docker package instead of Container Manager.
+  with the Docker package instead of Container Manager; switching an installation from
+  enrich to upload mode, step by step (`deploy/README.md`).
 
 ## 0.8.0 — 2026-10-12
 

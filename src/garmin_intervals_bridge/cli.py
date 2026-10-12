@@ -252,6 +252,9 @@ def run_loop(settings: Settings, store: Store, *, apply: bool, poll_seconds: int
                 if mode == "upload":
                     results["activities"] = sync_activities(settings, garmin, intervals, store, apply=apply,
                                                             allow_upload=True)
+                    gear_result = _gear_recent(settings, store, intervals, apply=apply)
+                    if gear_result:
+                        results["gear"] = gear_result
                 else:
                     results["activities"] = sync_enrich(settings, garmin, intervals, store, apply=apply,
                                                         scan_interval_minutes=ACTIVITY_SCAN_MINUTES)
@@ -278,6 +281,8 @@ def run_loop(settings: Settings, store: Store, *, apply: bool, poll_seconds: int
                 garmin = GarminSource(settings.token_dir, settings.garmin_request_delay)
                 result = sync_activities(settings, garmin, intervals, store, apply=apply, allow_upload=True,
                                          activity_days=2)
+                if result.get("uploaded"):
+                    result["gear"] = _gear_recent(settings, store, intervals, apply=apply)
                 result["wellness"] = wellness_check(settings, garmin, intervals, store, apply=apply)
                 store.record_run("watch", {"apply": apply, "mode": mode, "garmin_requests": garmin.requests, **result})
                 if result.get("uploaded") or result.get("would_upload"):
@@ -690,6 +695,10 @@ def main(argv: list[str] | None = None) -> int:
                         results["activities"] = sync_activities(settings, garmin, intervals, store,
                             apply=args.apply, allow_upload=args.allow_activity_upload,
                             activity_days=args.activity_days)
+                        # gear as in enrich mode, for the uploaded originals
+                        gear_result = _gear_recent(settings, store, intervals, apply=args.apply)
+                        if gear_result:
+                            results["gear"] = gear_result
                     if args.scope in ("all", "wellness"):
                         results["wellness"] = sync_wellness(settings, garmin, intervals, store,
                             apply=args.apply, wellness_days=args.wellness_days,

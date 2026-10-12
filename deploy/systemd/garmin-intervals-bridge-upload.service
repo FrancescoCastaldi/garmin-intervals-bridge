@@ -1,7 +1,8 @@
 # garmin-intervals-bridge, UPLOAD MODE: for the day the official Garmin import is switched off
 # (or Intervals can no longer expose Garmin-imported data). Every 10 minutes: ask Garmin for new
-# activities and upload their originals as your own files. Use INSTEAD of the watch timer;
-# keep the 30-minute unit for wellness (sync --scope wellness).
+# activities and upload their originals as your own files, and put their gear on them. Use
+# INSTEAD of the watch timer; keep the 30-minute unit for wellness (sync --scope wellness).
+# A dry run as shipped: add --apply once its journal shows the right activities.
 [Unit]
 OnFailure=garmin-intervals-bridge-alert@%n.service
 Description=Garmin -> Intervals.icu bridge: upload mode poll (official import off)

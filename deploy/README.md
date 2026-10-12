@@ -103,8 +103,23 @@ When the official Garmin import is off (or Intervals can no longer expose
 Garmin-imported data through its API), install
 `garmin-intervals-bridge-upload.{service,timer}` instead of the watch timer:
 it asks Garmin every 10 minutes for new activities and uploads their originals
-(dry run until `--apply`). Change the 30-minute unit to `--scope wellness`.
-Three Garmin requests per poll, about 450 a day.
+(dry run until `--apply`), and puts their Garmin gear on them once `gear --apply`
+has set it up. Change the 30-minute unit to `--scope wellness`. Three Garmin
+requests per poll, about 450 a day.
+
+Switching an enrich installation over:
+
+1. In Intervals, turn the Garmin connection's **activity** import off (wellness
+   and workout upload stay on). A Strava connection that imports activities
+   must go off too: a copy already there blocks the original's upload.
+2. `cp deploy/systemd/garmin-intervals-bridge-upload.{service,timer} /etc/systemd/system/`,
+   add `--apply` to its `ExecStart`.
+3. In `garmin-intervals-bridge.service`: `sync --scope wellness --apply`.
+4. `systemctl daemon-reload && systemctl disable --now garmin-intervals-bridge-watch.timer
+   && systemctl enable --now garmin-intervals-bridge-upload.timer`.
+
+Activities imported before stay as they are (the bridge never deletes); new ones
+arrive as your own uploads within ten minutes of Garmin's sync.
 
 ## Failure alerts
 
