@@ -116,7 +116,7 @@ The second line restarts the background bridge with the new version.
 - *"Another bridge instance is running"*: the background bridge is running;
   stop it first (see *The past*).
 - **Garmin's values gone from an activity after Intervals' "Reprocess file"**:
-  `py -m garmin_intervals_bridge enrich --intervals-id <the activity's link> --apply`, or
+  `py -m garmin_intervals_bridge enrich <the activity's id or link> --apply`, or
   the web page (`ui`) → *Actions → One activity again*.
 - *"429"* or *"too many requests"* at the Garmin sign-in: Garmin limits
   sign-ins; wait an hour and run `setup` again.

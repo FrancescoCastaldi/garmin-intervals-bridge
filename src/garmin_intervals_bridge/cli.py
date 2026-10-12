@@ -79,8 +79,9 @@ def build_parser() -> argparse.ArgumentParser:
                                            "original, compared with what Intervals holds now – e.g. after "
                                            "Intervals' 'Reprocess file' (dry run unless --apply; works next to "
                                            "a running bridge)")
+    enrich.add_argument("activity", nargs="?", help="The Intervals activity: its id (i12345678) or its link")
     enrich.add_argument("--activity-id", help="Garmin Connect activity ID")
-    enrich.add_argument("--intervals-id", help="Intervals activity ID or its link; enough on its own")
+    enrich.add_argument("--intervals-id", help="Same as ACTIVITY")
     enrich.add_argument("--apply", action="store_true", help="Actually PUT fields and streams")
     enrich.add_argument("--refresh-own-streams", action="store_true",
                         help="(always on now) rewrite the streams this bridge wrote before")
@@ -396,8 +397,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "compare-fit":
             print(json.dumps(compare_fit(args.file_a, args.file_b), indent=2))
             return 0
-        if args.cmd == "enrich" and not (args.activity_id or args.intervals_id):
-            raise ValueError("enrich needs the Intervals activity: --intervals-id i12345678 (or its link)")
+        if args.cmd == "enrich":
+            args.intervals_id = args.intervals_id or args.activity
+            if not (args.activity_id or args.intervals_id):
+                raise ValueError("enrich needs the Intervals activity: enrich i12345678 (or its link)")
         if args.env_file:
             os.environ["BRIDGE_ENV_FILE"] = str(args.env_file)
         if args.cmd == "setup":

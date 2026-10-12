@@ -6,8 +6,8 @@ One activity again, the easy way – thanks @DarKen.
 
 ### Changed
 
-- `enrich` needs only the Intervals activity: `enrich --intervals-id <id or its link>
-  --apply`. It compares with what Intervals holds now (also when the bridge had
+- `enrich` needs only the Intervals activity: `enrich <id or link> --apply`
+  (id `i12345678` or the activity's link). It compares with what Intervals holds now (also when the bridge had
   finished with it), rewrites its own streams, and works next to a running bridge
   (`run`, a container) instead of stopping at "Another bridge instance is running".
   The use: Intervals' *Reprocess file* re-reads its own filtered copy and drops what

@@ -578,7 +578,8 @@ def test_enrich_one_activity_runs_next_to_a_running_bridge(tmp_path, monkeypatch
     monkeypatch.setattr(cli, "enrich_activity", lambda gid, g, iv, st, **k: seen.update(gid=gid, **k)
                         or {"outcome": "planned"})
     with single_instance(tmp_path, ("activities", "wellness")):                # `run` holds these
-        assert main(["enrich", "--intervals-id", "https://intervals.icu/activities/i42"]) == 0
+        assert main(["enrich", "https://intervals.icu/activities/i42"]) == 0
+        assert main(["enrich", "--intervals-id", "i42"]) == 0
     assert seen["gid"] == "42" and seen["intervals_id"] == "i42" and seen["recheck"] and seen["refresh_own"]
     assert main(["enrich"]) == 1                                                # names no activity
 

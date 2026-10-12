@@ -180,7 +180,7 @@ keeps everything).
   folder; stop one.
 - Garmin's values gone from an activity after Intervals' *Reprocess file*:
   web page → *Actions → One activity again*, or in the terminal
-  `garmin-intervals-bridge enrich --intervals-id <the activity's link> --apply`.
+  `garmin-intervals-bridge enrich <the activity's id or link> --apply`.
 - Times or dates a few hours off: `BRIDGE_TIMEZONE` is missing or wrong (the
   log's second line says which zone it uses).
 - Questions and reports: the forum thread above, or
