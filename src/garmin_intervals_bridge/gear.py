@@ -558,11 +558,14 @@ def report(plan: dict, details: bool = False) -> dict:
     return out
 
 
-def save_config(store: Any, plan: dict, created_ids: dict[str, str]) -> None:
+def save_config(store: Any, plan: dict, created_ids: dict[str, str], *, create: bool = False,
+                include_retired: bool = False) -> None:
+    """What the scheduled runs follow: the policy, the pairs, and whether new Garmin gear is created too."""
     pairs = {u: created_ids.get(t, t) for u, t in plan["pairs"].items()}
     store.set_meta(CONFIG_KEY, json.dumps({"policy": plan["policy"],
                                            "map": {u: t for u, t in pairs.items() if not t.startswith("new:")},
                                            "signatures": plan.get("signatures") or {},
+                                           "create": create, "include_retired": create and include_retired,
                                            "since": date.today().isoformat()}))
 
 
@@ -576,18 +579,28 @@ def load_config(store: Any) -> dict | None:
 
 def sync_recent(settings: Any, store: Any, intervals: Any, *, apply: bool, days: int = RECENT_DAYS,
                 now: datetime | None = None) -> dict:
-    """For the scheduled runs, once `gear --apply` has run: the last week, same policy, same pairs."""
+    """For the scheduled runs, once `gear --apply` has run: the last week, same policy, same pairs.
+
+    With `--create` once given, gear that appears in Garmin later (a new pair of shoes) is
+    created in Intervals too, and remembered.
+    """
     config = load_config(store)
     if not config:
         return {}
     today = (now or datetime.now(settings.timezone)).date()
     plan = build_plan(store, intervals, start=today - timedelta(days=days), end=today,
                       policy=config.get("policy", "intervals"), config=config,
+                      create=bool(config.get("create")), include_retired=bool(config.get("include_retired")),
                       sensors=SensorCache(store) if config.get("policy") == "evidence" else None)
     result = {"checked": plan["activities"], "to_assign": len(plan["assign"])}
-    if apply and plan["assign"]:
+    if apply and (plan["assign"] or plan["create"]):
         done = apply_plan(plan, intervals, recalc=False)       # Intervals counts each assignment itself
         result.update(written=done["written"], failed=done["failed"])
+        if done["ids"]:
+            config["map"] = {**(config.get("map") or {}),
+                             **{u: done["ids"][t] for u, t in plan["pairs"].items() if t in done["ids"]}}
+            store.set_meta(CONFIG_KEY, json.dumps(config))
+            result["created"] = done["created"]
         for row in plan["assign"]:
             log.info("Gear: %s %s -> %s (%s)", row["day"], row["type"], row["garmin"], row["reason"])
     return result

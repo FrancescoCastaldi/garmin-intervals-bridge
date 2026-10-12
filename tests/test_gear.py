@@ -55,7 +55,9 @@ class IntervalsFake:
 
     def create_gear(self, payload):
         self.created.append(payload)
-        return {"id": f"g{len(self.created)}", **payload}
+        made = {"id": f"g{len(self.created)}", **payload}
+        self.gear_list.append(made)                                  # Intervals lists it from now on
+        return made
 
 
 def archive(store, gid, day, sport, gear_items, km=40):
@@ -260,3 +262,39 @@ def test_retired_garmin_gear_is_pointed_out_and_created_on_request(tmp_path):
     assert {"name": "Salewa Wildfire", "type": "Shoes", "purchased": "2020-09-11", "retired": "2024-06-06"} in \
         [c["payload"] for c in plan["create"]] and not plan["retired_not_created"]
     st.close()
+
+
+def test_once_create_was_chosen_the_scheduled_runs_create_new_garmin_gear(tmp_path):
+    st, iv = scene(tmp_path)
+    settings = SimpleNamespace(timezone=ZoneInfo("Europe/Vienna"))
+    now = datetime(2025, 6, 5, 12, tzinfo=ZoneInfo("Europe/Vienna"))
+    st.set_meta(gear.CONFIG_KEY, json.dumps({"policy": "intervals", "map": {}, "signatures": {}, "create": True}))
+    out = gear.sync_recent(settings, st, iv, apply=True, now=now)          # a new pair, first run with it
+    assert out["created"] == ['"Zoom Fly" Orange'] and iv.assigned == [("i105", "g1")]
+    assert gear.load_config(st)["map"] == {"u-shoe": "g1"}                  # remembered
+    out = gear.sync_recent(settings, st, iv, apply=True, now=now)
+    assert "created" not in out and len(iv.created) == 1                    # once
+    st.close()
+
+
+def test_create_is_remembered_until_no_create(tmp_path, monkeypatch, capsys):
+    from garmin_intervals_bridge import cli
+    st, iv = scene(tmp_path)
+    st.close()
+    monkeypatch.setenv("BRIDGE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("GARMIN_TOKEN_DIR", str(tmp_path / "tokens"))
+    monkeypatch.setenv("INTERVALS_API_KEY", "not-a-real-key")
+    monkeypatch.setattr(cli, "IntervalsClient", lambda *a, **k: iv)
+
+    def run(*args):
+        assert cli.main(["gear", "--apply", *args]) == 0
+        out = json.loads(capsys.readouterr().out)
+        st = Store(tmp_path)
+        config = gear.load_config(st)
+        st.close()
+        return out["scheduled_runs_create_new_gear"], config["create"]
+
+    assert run() == (False, False)
+    assert run("--create") == (True, True)
+    assert run() == (True, True)                       # a later plain --apply does not switch it off
+    assert run("--no-create") == (False, False)

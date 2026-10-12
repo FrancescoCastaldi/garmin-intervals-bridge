@@ -143,6 +143,9 @@ def build_parser() -> argparse.ArgumentParser:
                            "(repeatable)")
     gear.add_argument("--create", action="store_true", help="Create Garmin gear Intervals does not have")
     gear.add_argument("--include-retired", action="store_true", help="With --create: retired gear too")
+    gear.add_argument("--no-create", action="store_true",
+                      help="Stop the scheduled runs from creating new Garmin gear (they do once --create was used "
+                           "with --apply)")
     gear.add_argument("--from", dest="start", help="YYYY-MM-DD (default: everything archived)")
     gear.add_argument("--to", dest="end", help="YYYY-MM-DD (default: today)")
     gear.add_argument("--details", action="store_true", help="List every activity, not only the counts")
@@ -388,8 +391,13 @@ def main(argv: list[str] | None = None) -> int:
                     out["apply"] = args.apply
                     if args.apply:
                         done = apply_gear_plan(plan, intervals)
-                        save_gear_config(store, plan, done.pop("ids"))
+                        before = load_gear_config(store) or {}
+                        # --create is remembered: the scheduled runs create new Garmin gear too (until --no-create)
+                        create = (args.create or bool(before.get("create"))) and not args.no_create
+                        retired = create and (args.include_retired or bool(before.get("include_retired")))
+                        save_gear_config(store, plan, done.pop("ids"), create=create, include_retired=retired)
                         out["result"] = done
+                        out["scheduled_runs_create_new_gear"] = create
                     if args.recalc:
                         corrected = {x["gear"] for x in (out.get("result") or {}).get("totals_corrected", [])}
                         out["totals"] = [x for x in refresh_gear_totals(

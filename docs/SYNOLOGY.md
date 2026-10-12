@@ -86,8 +86,10 @@ garmin-intervals-bridge gear --create --include-retired --apply     # create you
 ```
 
 `--include-retired` adds your retired shoes too (retired, with their dates). No
-restart needed: the running bridge keeps new activities in line. Details:
-[README – Gear](../README.md#gear).
+restart needed: the running bridge keeps new activities in line, and a new
+pair you add in Garmin Connect later is created in Intervals by itself (because
+`--create` was used once). All of that lives in your data folder, so a restarted
+or recreated container just carries on. Details: [README – Gear](../README.md#gear).
 
 ## 8. The past (optional, once)
 

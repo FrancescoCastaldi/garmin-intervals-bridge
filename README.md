@@ -253,6 +253,10 @@ garmin-intervals-bridge gear …` (it does not wait for the running bridge).
 - **Afterwards** the scheduled runs keep the last week in line with the same
   choices. Gear chosen on the watch comes with the activity; gear picked in
   the Garmin Connect app after the run is read once more half a day later.
+  Once `--create` was used with `--apply`, a new pair you add in Garmin
+  Connect is created in Intervals by the scheduled runs too (`--no-create`
+  stops that). The choices live in the data folder: a restart or a new
+  container with the same folder carries on.
 - **History:** the bridge knows the gear of the activities in its archive —
   those since it started, plus what `backfill --scope activities --from DATE
   --archive-only` adds once (a few Garmin requests per activity; stop a

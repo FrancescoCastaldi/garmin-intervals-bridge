@@ -97,6 +97,23 @@ garmin-intervals-bridge imready4
 The scheduled runs only write when they run with `--apply`, as for everything
 else the bridge writes.
 
+## Without a Garmin watch
+
+The advice itself needs only Intervals: `imready4` reads the `hrv` and
+`restingHR` your HRV app or device puts there and never contacts Garmin – no
+Garmin login is needed for it. Install the bridge as in the
+[Windows](WINDOWS.md) or [Mac](MAC.md) guide (skip the Garmin sign-in), put your
+`INTERVALS_API_KEY` in the `.env` file, and run once a morning, after your
+measurement has reached Intervals:
+
+```bash
+garmin-intervals-bridge imready4 --apply
+```
+
+(on Windows `py -m garmin_intervals_bridge imready4 --apply`). Schedule it with
+the Windows Task Scheduler, a LaunchAgent or cron; if the morning's values are
+not there yet it writes nothing, and a later run catches up.
+
 ## Every morning
 
 Once the bridge has read last night's values (within about ten minutes of your

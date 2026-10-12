@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- `gear --create --apply` is remembered: from then on the scheduled runs also
+  create gear that appears in Garmin Connect later (a new pair of shoes) and
+  put it on its activities; `gear --apply --no-create` stops that. A later
+  `gear --apply` without `--create` keeps it.
+
+### Documentation
+
+- ImReady4's advice without a Garmin watch: `imready4` needs Intervals only,
+  scheduled once a morning (`docs/IMREADY4.md`).
+
 ## 0.7.0 — 2026-10-12
 
 Strava-first activities enriched at once, a calmer second training advice to compare
