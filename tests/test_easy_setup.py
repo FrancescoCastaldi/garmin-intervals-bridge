@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 import pytest
 import requests
 
-from garmin_intervals_bridge import __version__, autostart, cli, config, notices, wizard
+from garmin_intervals_bridge import __version__, alerts, autostart, cli, config, notices, wizard
 from garmin_intervals_bridge.garmin import GarminLoginNeeded
 from garmin_intervals_bridge.store import Store, single_instance
 
@@ -516,7 +516,10 @@ def test_setup_sets_up_e_mail_and_push_alerts_after_a_test_message(_empty_home, 
     code, _, _ = _wizard(script, monkeypatch, notify=notify)
     assert code == 0
     said = "\n".join(script.said)
-    assert "smtp.gmail.com" in said and "app password" in said and "Sending failed: the mailbox refused" in said
+    # whole lines, not substrings: the server named, Gmail's hint, the refusal
+    assert "The bridge sends from your own mailbox to yourself, through smtp.gmail.com." in script.said
+    assert alerts.HINTS[alerts.provider("ann@gmail.com")[0]] in script.said
+    assert "Sending failed: the mailbox refused the user name or password." in script.said
     values = config.parse_env_file(_empty_home / "GarminBridge" / ".env")
     assert values["BRIDGE_ALERT_EMAIL"] == "ann@gmail.com" and values["BRIDGE_SMTP_PASSWORD"] == "abcd efgh ijkl mnop"
     assert "BRIDGE_SMTP_HOST" not in values                               # Gmail's server is built in
