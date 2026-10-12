@@ -29,6 +29,7 @@ daily archive – keep it private.
   → API key*
 - **Time zone** – yours, e.g. `Europe/Vienna`: it decides which date last
   night's sleep belongs to
+- **Web page password** – your own, 8 characters or more
 - optional, under *Show more settings*: ImReady4's training advice, the
   experimental trend advice
 
@@ -37,16 +38,13 @@ without writing anything.
 
 ## 3. Sign in to Garmin once
 
-Click the container's icon → *Console*, and type:
-
-```bash
-garmin-intervals-bridge login
-```
-
-Enter your Garmin Connect e-mail, password and, if asked, the MFA code. The
-password is used once and not stored; the session renews itself for about a
-year. The running bridge picks it up within 15 minutes. If Garmin answers
-"429", wait an hour – Garmin rate-limits sign-ins.
+Click the container's icon → *WebUI*, sign in with your web page password,
+then **Garmin** → your Garmin Connect e-mail and password, and the code if
+Garmin sends one. The password is used once and not stored; the session
+renews itself for about a year, and the bridge starts working within a
+minute. If Garmin answers "429", wait an hour – Garmin rate-limits
+sign-ins. (Without the web page: icon → *Console*,
+`garmin-intervals-bridge login`.)
 
 ## 4. Let it write
 

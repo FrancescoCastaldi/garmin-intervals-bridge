@@ -11,7 +11,7 @@ from contextlib import ExitStack
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from . import __version__, autostart, hrvtrend, imready4, notices, wizard
+from . import __version__, autostart, hrvtrend, imready4, notices, webui, wizard
 from .charts import setup_charts
 from .config import Settings, configured_log_file
 from .enrich import enrich_activity, gap_report, match_activity
@@ -57,6 +57,12 @@ def build_parser() -> argparse.ArgumentParser:
     what.add_argument("--status", action="store_true", help="Show whether it is set up")
     what.add_argument("--dry-run", action="store_true", help="Show the files and commands, change nothing")
     start.add_argument("--mode", choices=["enrich", "upload"], default="enrich", help="As for `run`")
+    page = sub.add_parser("ui", help="Open the bridge's web page in your browser: status, Garmin sign-in (MFA), "
+                                     "settings, gear and chart actions, the log. Until Ctrl+C")
+    page.add_argument("--port", type=int, default=webui.DEFAULT_PORT)
+    page.add_argument("--host", default="127.0.0.1",
+                      help="127.0.0.1 (default) = this computer only; anything else needs BRIDGE_UI_PASSWORD")
+    page.add_argument("--no-browser", action="store_true", help="Only print the link")
     sub.add_parser("login", help="Sign into Garmin once and save refreshable tokens (interactive)")
     probe = sub.add_parser("probe", help="Download and archive one untouched ORIGINAL FIT; no Intervals writes")
     probe.add_argument("--activity-id", help="Garmin Connect activity ID (default: latest)")
@@ -291,12 +297,14 @@ def run_loop(settings: Settings, store: Store, *, apply: bool, poll_seconds: int
             log.info("Stopped")
             return 0
         except GarminBlocked as exc:
-            log.warning("%s; pausing for 15 minutes", exc)
+            on_page = isinstance(exc, GarminLoginNeeded) and getattr(settings, "ui_port", None)
+            log.warning("%s%s; pausing for 15 minutes", exc,
+                        f", or sign in on the web page (port {settings.ui_port})" if on_page else "")
             if isinstance(exc, GarminLoginNeeded):
                 notices.login_needed(settings, store, intervals, datetime.now(settings.timezone).date(), apply=apply)
             next_sync = max(next_sync, time.time() + 900)
-            if iterations is None:
-                time.sleep(900)
+            if iterations is None and wait_after_block(exc):
+                next_sync = 0                               # signed in on the web page: go on now
             continue
         except Exception as exc:
             if exc.__class__.__module__.startswith("requests"):
@@ -308,6 +316,16 @@ def run_loop(settings: Settings, store: Store, *, apply: bool, poll_seconds: int
     return 0
 
 
+def wait_after_block(exc: GarminBlocked, seconds: float = 900) -> bool:
+    """15 minutes of quiet after a block; True when a sign-in on the web page ended it early.
+    A rate limit (429) always waits the full time."""
+    if not isinstance(exc, GarminLoginNeeded):
+        time.sleep(seconds)
+        return False
+    notices.SIGNED_IN.clear()                   # only a sign-in from now on counts
+    return notices.SIGNED_IN.wait(seconds)
+
+
 def _log_to_file(path: Path, level: int) -> None:
     """Also log to a file (the autostarted bridge has no window): 5 MB, three old ones kept."""
     from logging.handlers import RotatingFileHandler
@@ -316,6 +334,10 @@ def _log_to_file(path: Path, level: int) -> None:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
     handler = RotatingFileHandler(path, maxBytes=5_000_000, backupCount=3, encoding="utf-8")
+    try:
+        path.chmod(0o600)                       # activities and health data: the owner's only
+    except OSError:
+        pass
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
     handler.setLevel(level)
     root.addHandler(handler)
@@ -376,6 +398,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "autostart":
             return _autostart(args, settings)
         settings.ensure_data_dir()
+        if args.cmd == "ui":
+            return webui.serve(host=args.host, port=args.port, open_browser=not args.no_browser)
         if args.cmd == "login":
             garmin = GarminSource(settings.token_dir, settings.garmin_request_delay)
             garmin.login(interactive=True)
@@ -554,6 +578,11 @@ def main(argv: list[str] | None = None) -> int:
                         poll = 600                            # a Garmin poll costs three requests, not one
                     if poll < (300 if args.mode == "upload" else 30) or args.sync_minutes < 5:
                         raise ValueError("--poll-seconds too small for this mode, or --sync-minutes < 5")
+                    if settings.ui_port:
+                        try:
+                            webui.start_in_background(settings.ui_port, settings.ui_host)
+                        except (ValueError, OSError) as exc:       # the bridge runs on without its page
+                            log.error("No web page: %s", exc)
                     return run_loop(settings, store, apply=args.apply, poll_seconds=poll,
                                     sync_minutes=args.sync_minutes, iterations=args.iterations, mode=args.mode)
                 if args.cmd == "watch":

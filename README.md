@@ -151,6 +151,7 @@ run is exactly what `--apply` would send.
 | --- | --- |
 | `setup` | Interactive setup: API key, time zone, Garmin sign-in, extras, a trial run, start at login. Again = change settings. |
 | `autostart [--status \| --remove \| --dry-run]` | Run `run --apply` in the background at every login (Windows Task Scheduler, macOS LaunchAgent, Linux systemd user service); again = restart. |
+| `ui [--port 8765] [--no-browser]` | The bridge's web page in your browser: status in plain words, Garmin sign-in with MFA, settings, gear and chart actions, the log. See [The web page](#the-web-page). |
 | `login` | Interactive Garmin sign-in (email, password, MFA). Only session tokens are stored. |
 | `probe [--activity-id]` | Download and archive one original FIT. |
 | `gap --activity-id` | Original vs. the copy Intervals holds; lists everything only the original carries. |
@@ -426,6 +427,22 @@ The compose service runs `run` and restarts with the machine. Prefer cron? Leave
 the service stopped and schedule `docker compose run --rm -T bridge watch --apply`
 every minute and `... sync --apply` every 30 minutes instead.
 
+### The web page
+
+`garmin-intervals-bridge ui` opens a page in your browser: whether the bridge runs and
+what it did last, the Garmin sign-in (MFA included – the way to renew an expired session
+without a terminal), the settings (the API key can be replaced, never shown), the gear
+and chart plans with a button to carry them out, today's training advice, the log. It
+listens on 127.0.0.1 only, and the link it opens carries a random key, so neither other
+users of the computer nor web pages in your browser can use it.
+
+Next to a running bridge – a container on a NAS – set `BRIDGE_UI_PORT=8765` and
+`BRIDGE_UI_PASSWORD` (8 characters or more) and publish the port; the page then asks
+for that password. It is plain http: keep it in your home network or put it behind your
+NAS's HTTPS reverse proxy. Every form carries a per-session token, a page on 127.0.0.1
+answers only to its own host name, and nothing is written to Intervals or Garmin without
+a button that says so. Standard library only, no JavaScript.
+
 ## Configuration
 
 Variables can also come from a settings file: the one named by `--env-file` or
@@ -450,6 +467,10 @@ win. Relative paths in a settings file count from its folder.
 | `BRIDGE_HRVTREND_ENABLED` | `false` | `true`: write the experimental trend advice into `HRVTrendAdvice` each morning (see [docs/HRV_TREND.md](docs/HRV_TREND.md)) |
 | `BRIDGE_LOG_FILE` | | Also log to this file (5 MB, three old ones kept); `setup` sets `bridge.log` |
 | `BRIDGE_UPDATE_CHECK` | `true` | Once a day, ask pypi.org for the newest version and log a hint with the update command; `false` turns it off |
+| `BRIDGE_UI_PORT` | | `run` also serves the web page on this port (needs `BRIDGE_UI_PASSWORD`) |
+| `BRIDGE_UI_PASSWORD` | | Password for the web page next to `run`, or for `ui --host` other than 127.0.0.1; 8+ characters |
+| `BRIDGE_UI_HOST` | `127.0.0.1` (container: `0.0.0.0`) | Where the page next to `run` listens |
+| `BRIDGE_OPTIONS_FILE` | `/data/options.json` | A Home Assistant add-on's options, read when there is no settings file (`intervals_api_key`, `timezone`, `imready4`, `hrvtrend`, `update_check`, `intervals_notes`, `ui_password`) |
 | `BRIDGE_INTERVALS_NOTES` | `true` | When Garmin's session ends and a new `login` is needed, a bridge running with `--apply` puts one note in your Intervals calendar (once per episode, never deleted by the bridge); `false` turns it off |
 
 ## Known limitations

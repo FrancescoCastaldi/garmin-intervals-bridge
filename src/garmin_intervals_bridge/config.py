@@ -84,6 +84,43 @@ def _flag(name: str, default: bool = False) -> bool:
     raise ValueError(f"{name} must be true or false")
 
 
+def _port(name: str) -> int | None:
+    value = os.getenv(name, "").strip()
+    if not value:
+        return None
+    if not value.isdigit() or not 1 <= int(value) <= 65535:
+        raise ValueError(f"{name} must be a port number (1-65535)")
+    return int(value)
+
+
+# A Home Assistant add-on hands its form to the container as /data/options.json.
+OPTIONS = {"intervals_api_key": "INTERVALS_API_KEY", "timezone": "BRIDGE_TIMEZONE",
+           "imready4": "BRIDGE_IMREADY4_ENABLED", "hrvtrend": "BRIDGE_HRVTREND_ENABLED",
+           "update_check": "BRIDGE_UPDATE_CHECK", "intervals_notes": "BRIDGE_INTERVALS_NOTES",
+           "ui_password": "BRIDGE_UI_PASSWORD"}
+
+
+def load_options_file(path: Path | None = None) -> list[str]:
+    """Settings from an add-on's options file (BRIDGE_OPTIONS_FILE, else /data/options.json);
+    variables already set win, as with a settings file."""
+    candidate = path or Path(os.getenv("BRIDGE_OPTIONS_FILE", "").strip() or "/data/options.json")
+    if not candidate.is_file():
+        return []
+    import json
+    try:
+        options = json.loads(candidate.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    loaded = []
+    for option, name in OPTIONS.items():
+        value = options.get(option) if isinstance(options, dict) else None
+        if value is None or value == "" or name in os.environ:
+            continue
+        os.environ[name] = str(value).lower() if isinstance(value, bool) else str(value)
+        loaded.append(name)
+    return loaded
+
+
 def _positive_int(name: str, default: int, max_value: int) -> int:
     value = int(os.getenv(name, str(default)))
     if not 1 <= value <= max_value:
@@ -150,11 +187,15 @@ class Settings:
     log_file: Path | None = None
     update_check: bool = True
     intervals_notes: bool = True
+    ui_port: int | None = None
+    ui_host: str = "127.0.0.1"
 
     @classmethod
     def from_env(cls) -> "Settings":
         settings_file = env_file()
         load_env_file(settings_file)
+        if settings_file is None:
+            load_options_file()
         base = settings_file.parent.resolve() if settings_file is not None else Path.cwd()
         data_dir = _path("BRIDGE_DATA_DIR", "data", base)
         token_dir = _path("GARMIN_TOKEN_DIR", str(data_dir / "tokens"), base)
@@ -187,6 +228,9 @@ class Settings:
             log_file=_path("BRIDGE_LOG_FILE", None, base),
             update_check=_flag("BRIDGE_UPDATE_CHECK", True),
             intervals_notes=_flag("BRIDGE_INTERVALS_NOTES", True),
+            ui_port=_port("BRIDGE_UI_PORT"),
+            ui_host=os.getenv("BRIDGE_UI_HOST", "").strip() or (
+                "0.0.0.0" if os.getenv("BRIDGE_IN_CONTAINER") else "127.0.0.1"),
         )
 
     def ensure_data_dir(self) -> None:

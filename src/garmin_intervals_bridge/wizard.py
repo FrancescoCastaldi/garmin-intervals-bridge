@@ -343,6 +343,7 @@ def _run(p: Prompt, client: Callable[[str], Any], garmin_source: Callable[..., A
     me = command_name()
     p.say(f"  Log:       {settings.log_file}\n"
           f"  Settings:  {path}  (to change them: {me} setup)\n"
+          f"  Its page:  {me} ui  (status, Garmin sign-in, settings, gear, the log - in your browser)\n"
           f"  Is it on:  {me} autostart --status\n"
           f"  Stop it:   {me} autostart --remove\n"
           f"  The past, gear of older activities, updating: the guide for your system, {GUIDES}")

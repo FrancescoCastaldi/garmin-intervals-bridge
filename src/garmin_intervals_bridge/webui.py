@@ -1,0 +1,682 @@
+"""A small web page for the bridge: what it does in plain words, the Garmin sign-in (MFA
+included), the settings, the one-off actions, the log. Standard library only.
+
+Two ways to open it:
+  `garmin-intervals-bridge ui`   on your own computer: 127.0.0.1 only, the link it opens
+                                 carries a random key (other users of the computer and web
+                                 pages in your browser cannot use the page without it)
+  `run` with BRIDGE_UI_PORT      next to the running bridge, e.g. in a container on a NAS:
+                                 needs BRIDGE_UI_PASSWORD (8 characters or more)
+
+Safety: every form carries a per-session token and must come from this page (CSRF); a
+page on 127.0.0.1 answers only to its own host name (DNS rebinding); no caching, no
+framing, no scripts. The Garmin password is handed to Garmin and dropped; the API key
+can be replaced but is never shown. Nothing is written to Intervals without a button
+that says so.
+"""
+from __future__ import annotations
+
+import hmac
+import html
+import logging
+import os
+import secrets
+import threading
+import time
+import webbrowser
+from collections import deque
+from datetime import datetime
+from http.cookies import SimpleCookie
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any, Callable
+from urllib.parse import parse_qs, urlsplit
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+import requests
+
+from . import __version__, autostart, hrvtrend, imready4, notices
+from .charts import setup_charts
+from .config import Settings
+from .garmin import GarminBlocked, GarminSource
+from .gear import apply_plan as apply_gear_plan
+from .gear import build_plan as build_gear_plan
+from .gear import load_config as load_gear_config
+from .gear import report as gear_report
+from .gear import save_config as save_gear_config
+from .health import silent_error_checks
+from .intervals import IntervalsClient
+from .store import InstanceBusy, Store, single_instance
+
+log = logging.getLogger(__name__)
+
+DEFAULT_PORT = 8765
+LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1")
+COOKIE = "gib_session"
+SESSION_SECONDS = 12 * 3600
+PENDING_SECONDS = 10 * 60
+MAX_BODY = 64 * 1024
+PLACEHOLDER = "change-me-please"           # what the templates ship with; never accepted
+LOG_LINES = 300
+HEADERS = {
+    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; "
+                               "form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Cache-Control": "no-store",
+}
+STYLE = """
+body{font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:0;background:#f6f7f9;color:#1d2330}
+header{background:#1d2330;color:#fff;padding:10px 16px}header a{color:#cfd6e4;margin-right:14px;text-decoration:none}
+header b{margin-right:22px}main{max-width:780px;margin:0 auto;padding:16px}
+section{background:#fff;border:1px solid #dde1e8;border-radius:8px;padding:12px 16px;margin:0 0 14px}
+h1{font-size:20px;margin:6px 0 12px}h2{font-size:16px;margin:4px 0 8px}
+.ok{color:#17803d}.warn{color:#a35c00}.bad{color:#b42318}.muted{color:#667085}
+table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:3px 8px 3px 0;vertical-align:top}
+input[type=text],input[type=password],input[type=email]{width:100%;max-width:360px;padding:6px;font:inherit}
+button{font:inherit;padding:6px 14px;border-radius:6px;border:1px solid #1d2330;background:#1d2330;color:#fff}
+button.light{background:#fff;color:#1d2330}form.inline{display:inline}
+pre{white-space:pre-wrap;word-break:break-word;font-size:12px;background:#f0f2f5;padding:8px;border-radius:6px}
+label{display:block;margin:6px 0}
+"""
+
+
+def esc(value: Any) -> str:
+    return html.escape("" if value is None else str(value), quote=True)
+
+
+def _ago(ts: float | None, now: float | None = None) -> str:
+    if not ts:
+        return "never"
+    minutes = int(((now or time.time()) - ts) // 60)
+    if minutes < 1:
+        return "just now"
+    if minutes < 120:
+        return f"{minutes} min ago"
+    hours = minutes // 60
+    return f"{hours} h ago" if hours < 48 else f"{hours // 24} days ago"
+
+
+class Session:
+    def __init__(self) -> None:
+        self.id = secrets.token_urlsafe(32)
+        self.csrf = secrets.token_urlsafe(32)
+        self.created = time.time()
+        self.garmin: Any = None                      # a sign-in waiting for its MFA code
+        self.garmin_since = 0.0
+        self.gear_plan: dict | None = None           # the plan shown, applied exactly as shown
+        self.gear_options: dict = {}
+
+
+class Reply(Exception):
+    """Ends a request with this response (redirects, refusals)."""
+
+    def __init__(self, status: int, body: str = "", headers: dict | None = None):
+        super().__init__(status)
+        self.status, self.body, self.headers = status, body, headers or {}
+
+
+class UI:
+    def __init__(self, *, host: str, port: int, password: str | None = None, key: str | None = None,
+                 in_run: bool = False, settings: Callable[[], Settings] = Settings.from_env,
+                 intervals_client: Callable[..., Any] = IntervalsClient,
+                 garmin_source: Callable[..., Any] = GarminSource,
+                 newer_release: Callable[[], str | None] = notices.newer_release,
+                 restart: Callable[[Path], Any] | None = None):
+        self.host, self.port, self.password, self.key, self.in_run = host, port, password, key, in_run
+        self.settings, self.intervals_client, self.garmin_source = settings, intervals_client, garmin_source
+        self.newer_release = newer_release
+        self.restart = restart or (lambda env: autostart.install(env))
+        self.sessions: dict[str, Session] = {}
+        self.lock = threading.Lock()
+        self.failures = 0
+        self._update: tuple[float, str | None] = (0.0, None)
+
+    @property
+    def local(self) -> bool:
+        return self.host in LOCAL_HOSTS
+
+    # ---- sessions ----
+
+    def new_session(self) -> Session:
+        with self.lock:
+            now = time.time()
+            for sid in [s for s, v in self.sessions.items() if now - v.created > SESSION_SECONDS]:
+                del self.sessions[sid]
+            session = Session()
+            self.sessions[session.id] = session
+            return session
+
+    def session(self, cookie_header: str | None) -> Session | None:
+        if not cookie_header:
+            return None
+        try:
+            cookie = SimpleCookie(cookie_header)
+        except Exception:
+            return None
+        morsel = cookie.get(COOKIE)
+        if morsel is None:
+            return None
+        with self.lock:
+            session = self.sessions.get(morsel.value)
+        if session is None or time.time() - session.created > SESSION_SECONDS:
+            return None
+        return session
+
+    def update_available(self) -> str | None:
+        """PyPI at most every six hours, and only when the update check is on."""
+        checked, latest = self._update
+        if time.time() - checked > 6 * 3600:
+            try:
+                latest = self.newer_release() if self.settings().update_check else None
+            except Exception:
+                latest = None
+            self._update = (time.time(), latest)
+        return self._update[1]
+
+    # ---- the pages ----
+
+    def page(self, session: Session | None, title: str, body: str) -> str:
+        nav = ""
+        if session is not None:
+            nav = "".join(f'<a href="{href}">{label}</a>' for href, label in (
+                ("/", "Status"), ("/garmin", "Garmin"), ("/settings", "Settings"), ("/actions", "Actions"),
+                ("/log", "Log")))
+            if self.password:
+                nav += '<a href="/logout">Sign out</a>'
+        return (f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
+                f'<meta name="viewport" content="width=device-width,initial-scale=1">'
+                f'<title>{esc(title)} - Garmin Intervals Bridge</title><style>{STYLE}</style></head>'
+                f'<body><header><b>Garmin &rarr; Intervals Bridge</b>{nav}</header><main><h1>{esc(title)}</h1>'
+                f'{body}</main></body></html>')
+
+    def form(self, session: Session, action: str, inner: str, button: str, light: bool = False,
+             inline: bool = False) -> str:
+        return (f'<form method="post" action="{esc(action)}"{" class=inline" if inline else ""}>'
+                f'<input type="hidden" name="csrf" value="{esc(session.csrf)}">{inner}'
+                f'<button{" class=light" if light else ""}>{esc(button)}</button></form>')
+
+    def status(self, session: Session, query: dict, form: dict) -> str:
+        settings = self.settings()
+        parts: list[str] = []
+        latest = self.update_available()
+        if latest:
+            how = ("Pull the new image and recreate the container." if autostart.platform() == "container" else
+                   "Update: <code>python -m pip install --upgrade garmin-intervals-bridge</code>, then restart "
+                   "the bridge.")
+            parts.append(f'<section><b class="warn">Version {esc(latest)} is out</b> (this is '
+                         f'{esc(__version__)}). {how}</section>')
+        store = Store(settings.data_dir)
+        try:
+            now = time.time()
+            runs = store.recent_runs(24 * 14)
+            last = runs[-1]["started"] if runs else None
+            alive = self.in_run or (last is not None and now - last < 15 * 60)
+            tokens = any(settings.token_dir.glob("*.json")) if settings.token_dir.is_dir() else False
+            line = (f'<b class="ok">Running</b> &middot; last check {esc(_ago(last, now))}' if alive else
+                    f'<b class="bad">Not running</b> &middot; last check {esc(_ago(last, now))}')
+            if alive and not tokens:
+                line = '<b class="warn">Waiting for the Garmin sign-in</b> &middot; <a href="/garmin">sign in</a>'
+
+            rows = [("Bridge", line), ("Version", esc(__version__))]
+            kind = autostart.platform()
+            if not self.in_run and kind != "container" and settings.env_file is not None:
+                state = autostart.status(settings.env_file)
+                rows.append(("Starts at login", '<span class="ok">yes</span>' if state["installed"] else
+                             '<span class="warn">no</span> &middot; set it up with <code>autostart</code>'))
+            garmin_ok = store.meta_updated("garmin_last_ok")
+            if store.get_meta(notices.LOGIN_NOTE_KEY):
+                garmin = '<b class="bad">sign-in needed</b> &middot; <a href="/garmin">sign in again</a>'
+            elif tokens:
+                garmin = f'<span class="ok">signed in</span> &middot; last confirmed {esc(_ago(garmin_ok, now))}'
+            else:
+                garmin = '<b class="warn">not signed in</b> &middot; <a href="/garmin">sign in</a>'
+            rows.append(("Garmin Connect", garmin))
+            syncs = [r for r in runs if r["command"] == "sync"]
+            if syncs:
+                m = syncs[-1]["metrics"]
+                a, w = m.get("activities") or {}, m.get("wellness") or {}
+                rows.append(("Last full run", f'{esc(_ago(syncs[-1]["started"], now))}: {a.get("seen", 0)} activities '
+                             f'seen, {a.get("enriched", a.get("uploaded", 0))} completed; wellness '
+                             f'{w.get("days_checked", 0)} days checked, {w.get("writes", 0)} written'))
+            rows.append(("Day boundary", esc(settings.timezone.key)))
+            on = [name for name, flag in (("ImReady4 advice", settings.imready4),
+                                          ("HRV trend advice", settings.hrvtrend)) if flag]
+            gear = load_gear_config(store)
+            if gear:
+                on.append("gear" + (" (creates new gear)" if gear.get("create") else ""))
+            rows.append(("Extras", esc(", ".join(on) or "none")))
+            parts.append("<section><table>" + "".join(f"<tr><th>{k}</th><td>{v}</td></tr>" for k, v in rows)
+                         + "</table></section>")
+            findings = silent_error_checks(settings, store, now=now)
+            if findings:
+                items = "".join(f'<li class="{"bad" if f["alert"] else "muted"}"><b>{esc(f["what"])}</b>: '
+                                f'{esc(f["detail"])}</li>' for f in findings)
+                parts.append(f"<section><h2>Checks</h2><ul>{items}</ul></section>")
+        finally:
+            store.close()
+        return self.page(session, "Status", "".join(parts))
+
+    # -- Garmin --
+
+    def garmin_page(self, session: Session, message: str = "", mfa: bool = False) -> str:
+        warning = ""
+        if not self.local:
+            warning = ('<p class="warn">This page travels unencrypted (http) unless you reach it through '
+                       'HTTPS, e.g. your NAS\'s reverse proxy. Sign in from your home network only.</p>')
+        if mfa:
+            body = self.form(session, "/garmin/mfa", '<label>The code Garmin just sent you '
+                             '<input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" '
+                             'required autofocus></label>', "Confirm")
+        else:
+            body = self.form(session, "/garmin", (
+                '<label>Garmin Connect e-mail <input type="email" name="email" autocomplete="username" required>'
+                '</label><label>Password <input type="password" name="password" autocomplete="current-password" '
+                'required></label>'), "Sign in")
+        return self.page(session, "Garmin Connect", f'{message}<section><p>Your password goes to Garmin for this '
+                         'sign-in only and is not stored; the bridge keeps the session, which renews itself for '
+                         f'about a year.</p>{warning}{body}</section>')
+
+    def garmin_post(self, session: Session, query: dict, form: dict) -> str:
+        settings = self.settings()
+        garmin = self.garmin_source(settings.token_dir, settings.garmin_request_delay)
+        try:
+            outcome = garmin.start_login(form.get("email", "").strip(), form.get("password", ""))
+        except GarminBlocked:
+            return self.garmin_page(session, '<p class="bad">Garmin limits sign-ins right now (429). Wait an hour, '
+                                             'then try again.</p>')
+        except Exception as exc:
+            name = type(exc).__name__
+            text = ("Garmin did not accept this e-mail and password." if "Authentication" in name
+                    else f"The sign-in failed ({esc(name)}).")
+            return self.garmin_page(session, f'<p class="bad">{text}</p>')
+        if outcome == "mfa":
+            session.garmin, session.garmin_since = garmin, time.time()
+            return self.garmin_page(session, "", mfa=True)
+        return self._signed_in(session, settings)
+
+    def garmin_mfa(self, session: Session, query: dict, form: dict) -> str:
+        settings = self.settings()
+        garmin = session.garmin
+        if garmin is None or time.time() - session.garmin_since > PENDING_SECONDS:
+            session.garmin = None
+            return self.garmin_page(session, '<p class="warn">That took too long; please sign in again.</p>')
+        try:
+            garmin.finish_login(form.get("code", ""))
+        except Exception as exc:
+            return self.garmin_page(session, f'<p class="bad">Garmin did not accept the code '
+                                             f'({esc(type(exc).__name__)}); try again.</p>', mfa=True)
+        session.garmin = None
+        return self._signed_in(session, settings)
+
+    def _signed_in(self, session: Session, settings: Settings) -> str:
+        store = Store(settings.data_dir)
+        try:
+            notices.garmin_ok(store)
+        finally:
+            store.close()
+        notices.SIGNED_IN.set()
+        soon = "goes on with it within a minute" if self.in_run else "uses it within 15 minutes"
+        return self.page(session, "Garmin Connect", f'<section><p class="ok"><b>Signed in.</b> The session is saved; '
+                         f'the running bridge {soon}.</p><p><a href="/">Back to the status</a></p></section>')
+
+    # -- settings --
+
+    def settings_page(self, session: Session, message: str = "") -> str:
+        settings = self.settings()
+        if settings.env_file is None:
+            rows = [("Time zone", settings.timezone.key), ("ImReady4 advice", settings.imready4),
+                    ("HRV trend advice", settings.hrvtrend), ("Update hint", settings.update_check),
+                    ("Calendar note when Garmin needs a sign-in", settings.intervals_notes)]
+            table = "".join(f"<tr><th>{esc(k)}</th><td>{esc(v)}</td></tr>" for k, v in rows)
+            return self.page(session, "Settings", f'{message}<section><p>These come from the container\'s '
+                             f'settings (its environment variables); change them there.</p><table>{table}</table>'
+                             '</section>')
+
+        def box(name: str, label: str, value: bool) -> str:
+            return (f'<label><input type="checkbox" name="{name}" value="1"{" checked" if value else ""}> '
+                    f'{esc(label)}</label>')
+        inner = (f'<label>Time zone (Region/City) <input type="text" name="timezone" '
+                 f'value="{esc(settings.timezone.key)}" required></label>'
+                 + box("imready4", "ImReady4's training advice into TrainingAdvice each morning", settings.imready4)
+                 + box("hrvtrend", "Experimental: the HRV trend advice in its own field", settings.hrvtrend)
+                 + box("update_check", "Tell me when a new version is out (asks pypi.org once a day)",
+                       settings.update_check)
+                 + box("intervals_notes", "A note in my Intervals calendar when Garmin needs a new sign-in",
+                       settings.intervals_notes)
+                 + '<label>Replace the Intervals API key (leave empty to keep it) <input type="password" '
+                   'name="api_key" autocomplete="off"></label>')
+        return self.page(session, "Settings", f'{message}<section>{self.form(session, "/settings", inner, "Save")}'
+                         f'<p class="muted">Saved in {esc(settings.env_file)}</p></section>')
+
+    def settings_post(self, session: Session, query: dict, form: dict) -> str:
+        from .wizard import write_env
+        settings = self.settings()
+        if settings.env_file is None:
+            raise Reply(403, "Settings come from the container here")
+        zone = form.get("timezone", "").strip()
+        try:
+            ZoneInfo(zone)
+        except (ZoneInfoNotFoundError, ValueError):
+            return self.settings_page(session, f'<p class="bad">"{esc(zone)}" is not a time zone name '
+                                               '(Region/City, e.g. Europe/London).</p>')
+        values = {"BRIDGE_TIMEZONE": zone}
+        for key, name in (("imready4", "BRIDGE_IMREADY4_ENABLED"), ("hrvtrend", "BRIDGE_HRVTREND_ENABLED"),
+                          ("update_check", "BRIDGE_UPDATE_CHECK"), ("intervals_notes", "BRIDGE_INTERVALS_NOTES")):
+            values[name] = "true" if form.get(key) == "1" else "false"
+        key = form.get("api_key", "").strip()
+        if key:
+            try:
+                self.intervals_client(key).athlete()
+            except requests.RequestException:
+                return self.settings_page(session, '<p class="bad">Intervals did not accept this key; nothing '
+                                                   'was changed.</p>')
+            values["INTERVALS_API_KEY"] = key
+        write_env(settings.env_file, values)
+        os.environ.update(values)
+        restart = ""
+        if not self.in_run and autostart.platform() != "container" and \
+                autostart.status(settings.env_file)["installed"]:
+            restart = self.form(session, "/restart", "", "Restart the background bridge now", light=True)
+        elif self.in_run:
+            restart = "<p>Restart the bridge to use them.</p>"
+        return self.settings_page(session, f'<section><p class="ok"><b>Saved.</b> The running bridge uses them '
+                                           f'after a restart.</p>{restart}</section>')
+
+    def restart_post(self, session: Session, query: dict, form: dict) -> str:
+        settings = self.settings()
+        if settings.env_file is None or autostart.platform() == "container":
+            raise Reply(403, "Nothing to restart from here")
+        # after this answer has gone out: the bridge that serves this page may be the one restarted
+        threading.Timer(1.0, self.restart, args=(settings.env_file,)).start()
+        return self.page(session, "Restart", '<section><p class="ok">The background bridge restarts with the '
+                         'current settings.</p><p><a href="/">Back to the status</a></p></section>')
+
+    # -- actions --
+
+    def actions_page(self, session: Session, message: str = "") -> str:
+        gear_form = self.form(session, "/actions/gear", (
+            '<label><input type="checkbox" name="create" value="1" checked> Create Garmin gear that Intervals does '
+            'not have yet</label><label><input type="checkbox" name="retired" value="1"> Retired gear too</label>'),
+            "Show the gear plan")
+        charts_form = self.form(session, "/actions/charts", "", "Show the chart plan")
+        advice_form = self.form(session, "/actions/advice", "", "Show today's advice")
+        return self.page(session, "Actions", f'{message}'
+                         '<section><h2>Gear</h2><p>Puts the bike or shoes Garmin recorded on the Intervals activities '
+                         f'the bridge has archived. You see the plan first; nothing is written before you confirm.</p>'
+                         f'{gear_form}</section>'
+                         '<section><h2>Charts</h2><p>Charts for the Garmin values on Intervals\' Fitness page '
+                         f'(private; existing charts are only completed).</p>{charts_form}</section>'
+                         '<section><h2>Training advice</h2><p>What ImReady4\'s rules and the HRV trend say for today '
+                         f'(read only).</p>{advice_form}</section>')
+
+    def _intervals(self, settings: Settings) -> Any:
+        return self.intervals_client(settings.intervals_api_key, settings.intervals_athlete_id)
+
+    def gear_post(self, session: Session, query: dict, form: dict) -> str:
+        settings = self.settings()
+        create, retired = form.get("create") == "1", form.get("retired") == "1"
+        store = Store(settings.data_dir)
+        try:
+            config = load_gear_config(store)
+            plan = build_gear_plan(store, self._intervals(settings), create=create, include_retired=retired,
+                                   config=config, policy=(config or {}).get("policy", "intervals"))
+        finally:
+            store.close()
+        session.gear_plan, session.gear_options = plan, {"create": create, "retired": retired}
+        out = gear_report(plan)
+        rows = "".join(f'<tr><td>{esc(g["garmin"])}</td><td>{esc(g["to"])}</td><td>{esc(g["sport"])}</td>'
+                       f'<td>{g["count"]}</td><td>{esc(g["from"])} &ndash; {esc(g["until"])}</td>'
+                       f'<td class="muted">{esc(g["reason"])}</td></tr>' for g in out["assign"])
+        made = "".join(f'<li>{esc(c.get("name"))} ({esc(c.get("type"))})</li>' for c in out["create"])
+        body = (f'<section><p>{out["garmin_activities"]} archived activities with Garmin gear; '
+                f'{sum(g["count"] for g in out["assign"])} get gear.</p>'
+                + (f"<h2>Created in Intervals</h2><ul>{made}</ul>" if made else "")
+                + (f'<table><tr><th>Garmin</th><th>Intervals</th><th>Sport</th><th>Activities</th><th>When</th>'
+                   f'<th>Why</th></tr>{rows}</table>' if rows else "<p>Nothing to change.</p>")
+                + "</section>")
+        if out["assign"] or out["create"]:
+            body += "<section>" + self.form(session, "/actions/gear-apply", "", "Apply this plan") + "</section>"
+        return self.page(session, "Gear plan", body)
+
+    def gear_apply(self, session: Session, query: dict, form: dict) -> str:
+        settings = self.settings()
+        plan, options = session.gear_plan, session.gear_options
+        if plan is None:
+            return self.actions_page(session, '<p class="warn">Show the plan first.</p>')
+        session.gear_plan = None
+        store = Store(settings.data_dir)
+        try:
+            with single_instance(settings.data_dir, ("gear",)):
+                done = apply_gear_plan(plan, self._intervals(settings))
+                before = load_gear_config(store) or {}
+                create = options.get("create") or bool(before.get("create"))
+                retired = create and (options.get("retired") or bool(before.get("include_retired")))
+                save_gear_config(store, plan, done.pop("ids"), create=create, include_retired=retired)
+        except InstanceBusy:
+            return self.actions_page(session, '<p class="warn">A gear run is busy right now; try again in a minute.'
+                                              '</p>')
+        finally:
+            store.close()
+        return self.actions_page(session, f'<section><p class="ok"><b>Done:</b> {done["written"]} activities, '
+                                          f'{len(done["created"])} gear created, {done["failed"]} failed.</p>'
+                                          '</section>')
+
+    def charts_post(self, session: Session, query: dict, form: dict) -> str:
+        settings = self.settings()
+        intervals = self._intervals(settings)
+        apply = form.get("apply") == "1"
+        out = setup_charts(intervals, apply=apply)
+        if apply:
+            return self.actions_page(session, f'<section><p class="ok"><b>Done:</b> {len(out["created"])} charts '
+                                              f'created, {len(out["updated"])} completed. Intervals: Fitness, '
+                                              'a tab, custom charts, search "Garmin Bridge".</p></section>')
+        names = [c["name"] for c in out["charts"]] + [f'{c["name"]} (completed)' for c in out["updates"]]
+        if not names:
+            return self.actions_page(session, '<section><p>All charts are there already.</p></section>')
+        items = "".join(f"<li>{esc(n)}</li>" for n in names)
+        confirm = self.form(session, "/actions/charts", '<input type="hidden" name="apply" value="1">',
+                            "Create these charts")
+        return self.page(session, "Chart plan", f"<section><ul>{items}</ul>{confirm}</section>")
+
+    def advice_post(self, session: Session, query: dict, form: dict) -> str:
+        settings = self.settings()
+        intervals = self._intervals(settings)
+        today = datetime.now(settings.timezone).date()
+        parts = []
+        for label, feature in (("ImReady4", imready4), ("HRV trend", hrvtrend)):
+            try:
+                out = feature.run_days(intervals, today, today, apply=False, today=today)
+                day = (out.get("days") or [{}])[0]
+                text = day.get("advice") or ("waits for last night's values" if day.get("waiting") else
+                                             "no advice")
+                why = day.get("zone") or day.get("rule") or day.get("reason") or out.get("field") or ""
+                parts.append(f"<tr><th>{esc(label)}</th><td><b>{esc(text)}</b></td>"
+                             f"<td class=muted>{esc(why)}</td></tr>")
+            except Exception as exc:
+                parts.append(f"<tr><th>{esc(label)}</th><td colspan=2 class=muted>"
+                             f"{esc(type(exc).__name__)}</td></tr>")
+        return self.page(session, f"Training advice {today}", f"<section><table>{''.join(parts)}</table></section>")
+
+    # -- log --
+
+    def log_page(self, session: Session, query: dict, form: dict) -> str:
+        settings = self.settings()
+        if settings.log_file is None or not settings.log_file.is_file():
+            text = ("No log file: set BRIDGE_LOG_FILE (setup does). In a container, its own log shows everything."
+                    if settings.log_file is None else "The log file is empty so far.")
+            return self.page(session, "Log", f"<section><p>{esc(text)}</p></section>")
+        with settings.log_file.open(encoding="utf-8", errors="replace") as fh:
+            lines = deque(fh, maxlen=LOG_LINES)
+        return self.page(session, "Log", f'<section><p class="muted">The last {len(lines)} lines of '
+                         f'{esc(settings.log_file)}, newest at the bottom.</p><pre>{esc("".join(lines))}</pre>'
+                         '</section>')
+
+    # -- sign-in to the page itself (password mode) --
+
+    def login_page(self, message: str = "") -> str:
+        return self.page(None, "Sign in", f'{message}<section><form method="post" action="/login">'
+                         '<label>Password (BRIDGE_UI_PASSWORD) <input type="password" name="password" '
+                         'autocomplete="current-password" required autofocus></label><button>Sign in</button>'
+                         '</form></section>')
+
+
+GET_PAGES = {"/": "status", "/garmin": "garmin", "/settings": "settings", "/actions": "actions", "/log": "log_page"}
+POST_PAGES = {"/garmin": "garmin_post", "/garmin/mfa": "garmin_mfa", "/settings": "settings_post",
+              "/restart": "restart_post", "/actions/gear": "gear_post", "/actions/gear-apply": "gear_apply",
+              "/actions/charts": "charts_post", "/actions/advice": "advice_post"}
+
+
+def handler_for(ui: UI) -> type[BaseHTTPRequestHandler]:
+    class Handler(BaseHTTPRequestHandler):
+        server_version = "garmin-intervals-bridge"
+        sys_version = ""
+
+        def log_message(self, format: str, *args: Any) -> None:       # no URLs (the key) in any log
+            pass
+
+        def do_GET(self) -> None:
+            self._handle("GET")
+
+        def do_POST(self) -> None:
+            self._handle("POST")
+
+        def _send(self, status: int, body: str = "", headers: dict | None = None) -> None:
+            data = body.encode("utf-8")
+            self.send_response(status)
+            for name, value in {**HEADERS, "Content-Type": "text/html; charset=utf-8", **(headers or {})}.items():
+                self.send_header(name, value)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def _handle(self, method: str) -> None:
+            try:
+                self._send(200, self._route(method))
+            except Reply as reply:
+                self._send(reply.status, reply.body, reply.headers)
+            except Exception as exc:
+                log.warning("Web page error on %s: %s", urlsplit(self.path).path, type(exc).__name__)
+                self._send(500, ui.page(None, "Something went wrong", f'<section><p class="bad">'
+                                        f'{esc(type(exc).__name__)}</p><p><a href="/">Back</a></p></section>'))
+
+        def _route(self, method: str) -> str:
+            url = urlsplit(self.path)
+            path, query = url.path, {k: v[0] for k, v in parse_qs(url.query).items()}
+            if ui.local:
+                allowed = {f"{h}:{ui.port}" for h in ("127.0.0.1", "localhost", "[::1]")}
+                if self.headers.get("Host", "") not in allowed:
+                    raise Reply(403, "Wrong host")
+            form: dict = {}
+            if method == "POST":
+                length = int(self.headers.get("Content-Length") or 0)
+                if length > MAX_BODY:
+                    raise Reply(413, "Too large")
+                raw = self.rfile.read(length).decode("utf-8", errors="replace")
+                form = {k: v[0] for k, v in parse_qs(raw, keep_blank_values=True).items()}
+                origin = self.headers.get("Origin")
+                if origin and urlsplit(origin).netloc != self.headers.get("Host", ""):
+                    raise Reply(403, "Foreign form")
+            session = ui.session(self.headers.get("Cookie"))
+            if session is None:
+                return self._without_session(method, path, query, form)
+            if path == "/login":
+                raise Reply(303, "", {"Location": "/"})
+            if path == "/logout":
+                with ui.lock:
+                    ui.sessions.pop(session.id, None)
+                raise Reply(303, "", {"Location": "/login" if ui.password else "/",
+                                      "Set-Cookie": f"{COOKIE}=; Max-Age=0; Path=/; HttpOnly; SameSite=Strict"})
+            if method == "POST":
+                if not hmac.compare_digest(form.get("csrf", ""), session.csrf):
+                    raise Reply(403, "Form expired; reload the page")
+                name = POST_PAGES.get(path)
+                if name is None:
+                    raise Reply(404, "Not found")
+                return getattr(ui, name)(session, query, form)
+            name = GET_PAGES.get(path)
+            if name is None:
+                raise Reply(404, "Not found")
+            if name == "garmin":
+                return ui.garmin_page(session)
+            if name == "settings":
+                return ui.settings_page(session)
+            if name == "actions":
+                return ui.actions_page(session)
+            return getattr(ui, name)(session, query, form)
+
+        def _without_session(self, method: str, path: str, query: dict, form: dict) -> str:
+            cookie = "{0}={1}; Path=/; HttpOnly; SameSite=Strict; Max-Age=" + str(SESSION_SECONDS)
+            if ui.key is not None:
+                if hmac.compare_digest(query.get("key", ""), ui.key):
+                    session = ui.new_session()
+                    raise Reply(303, "", {"Location": path, "Set-Cookie": cookie.format(COOKIE, session.id)})
+                raise Reply(403, ui.page(None, "Open the link from the terminal",
+                                         "<section><p>This page opens with the link "
+                                         "<code>garmin-intervals-bridge ui</code> printed.</p></section>"))
+            if path == "/login" and method == "POST":
+                if ui.password and hmac.compare_digest(form.get("password", "").encode(), ui.password.encode()):
+                    with ui.lock:
+                        ui.failures = 0
+                    session = ui.new_session()
+                    raise Reply(303, "", {"Location": "/", "Set-Cookie": cookie.format(COOKIE, session.id)})
+                with ui.lock:
+                    ui.failures += 1
+                    pause = min(30, ui.failures)
+                time.sleep(pause)                                    # slows guessing down
+                return ui.login_page('<p class="bad">Wrong password.</p>')
+            if path == "/login":
+                return ui.login_page()
+            raise Reply(303, "", {"Location": "/login"})
+
+    return Handler
+
+
+def check(host: str, password: str | None, in_run: bool) -> None:
+    if password is not None and len(password) < 8:
+        raise ValueError("BRIDGE_UI_PASSWORD must have 8 characters or more")
+    if password == PLACEHOLDER:
+        raise ValueError("BRIDGE_UI_PASSWORD is still the template's placeholder: choose your own")
+    if (in_run or host not in LOCAL_HOSTS) and not password:
+        raise ValueError("The web page " + ("next to `run`" if in_run else f"on {host}") +
+                         " needs BRIDGE_UI_PASSWORD (8 characters or more)")
+
+
+def make_server(ui: UI) -> ThreadingHTTPServer:
+    server = ThreadingHTTPServer((ui.host, ui.port), handler_for(ui))
+    server.daemon_threads = True
+    ui.port = server.server_address[1]
+    return server
+
+
+def serve(*, host: str = "127.0.0.1", port: int = DEFAULT_PORT, open_browser: bool = True) -> int:
+    """`garmin-intervals-bridge ui`: until Ctrl+C."""
+    password = os.getenv("BRIDGE_UI_PASSWORD") or None
+    check(host, password, in_run=False)
+    ui = UI(host=host, port=port, password=password, key=None if password else secrets.token_urlsafe(24))
+    server = make_server(ui)
+    shown = "127.0.0.1" if host in ("0.0.0.0", "::") else host
+    url = f"http://{shown}:{ui.port}/" + (f"?key={ui.key}" if ui.key else "")
+    print(f"The bridge's page: {url}\n(Ctrl+C closes it; the bridge itself keeps running in the background.)")
+    if open_browser:
+        webbrowser.open(url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+    return 0
+
+
+def start_in_background(port: int, host: str) -> ThreadingHTTPServer:
+    """Next to `run` (a container on a NAS): a password, never a key in a log."""
+    password = os.getenv("BRIDGE_UI_PASSWORD") or None
+    check(host, password, in_run=True)
+    ui = UI(host=host, port=port, password=password, in_run=True)
+    server = make_server(ui)
+    threading.Thread(target=server.serve_forever, name="web-page", daemon=True).start()
+    log.info("Web page on port %d (sign in with BRIDGE_UI_PASSWORD)", ui.port)
+    return server
+

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 from datetime import date
 from typing import Any
 
@@ -23,6 +24,8 @@ log = logging.getLogger(__name__)
 
 PYPI_URL = "https://pypi.org/pypi/garmin-intervals-bridge/json"
 LOGIN_NOTE_KEY = "notice:garmin_login"
+# Set by the web page after a Garmin sign-in: a `run` waiting for one goes on at once.
+SIGNED_IN = threading.Event()
 LOGIN_NOTE_NAME = "Garmin bridge: Garmin login needed"
 LOGIN_NOTE_TEXT = ("The garmin-intervals-bridge can no longer sign in to Garmin Connect: the saved session "
                    "expired or was revoked. Nothing is synced until you sign in again: run "

@@ -8,9 +8,9 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/futureweb/garmin-intervals-bridge/issues</Support>
   <Project>https://github.com/futureweb/garmin-intervals-bridge</Project>
-  <Overview>Garmin to Intervals.icu bridge: puts back what Garmin strips from the FIT files it sends to Intervals.icu (Stamina, Recovery Time, VO2max, Training Effect ...), syncs the daily wellness data the official sync misses, and your Garmin gear. It starts as a dry run (Post Arguments: run); once its log looks right, change Post Arguments to: run --apply. Sign in to Garmin once in the container's console: garmin-intervals-bridge login. Guide: docs/UNRAID.md in the project.</Overview>
+  <Overview>Garmin to Intervals.icu bridge: puts back what Garmin strips from the FIT files it sends to Intervals.icu (Stamina, Recovery Time, VO2max, Training Effect ...), syncs the daily wellness data the official sync misses, and your Garmin gear. It starts as a dry run (Post Arguments: run); once its log looks right, change Post Arguments to: run --apply. Sign in to Garmin once on its web page (WebUI, with the password you set here) or in the container's console: garmin-intervals-bridge login. Guide: docs/UNRAID.md in the project.</Overview>
   <Category>Tools: Other:</Category>
-  <WebUI/>
+  <WebUI>http://[IP]:[PORT:8765]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/futureweb/garmin-intervals-bridge/main/deploy/unraid/garmin-intervals-bridge.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/futureweb/garmin-intervals-bridge/main/docs/assets/icon-bridge-128.png</Icon>
   <ExtraParams>--restart unless-stopped --init --security-opt no-new-privileges:true --cap-drop ALL</ExtraParams>
@@ -18,6 +18,9 @@
   <Config Name="Intervals.icu API key" Target="INTERVALS_API_KEY" Default="" Mode="" Description="Intervals.icu: Settings, Developer Settings, API key" Type="Variable" Display="always" Required="true" Mask="true"/>
   <Config Name="Time zone" Target="BRIDGE_TIMEZONE" Default="Europe/London" Mode="" Description="Your time zone (Region/City): which date last night's sleep belongs to" Type="Variable" Display="always" Required="true" Mask="false">Europe/London</Config>
   <Config Name="Data" Target="/data" Default="/mnt/user/appdata/garmin-intervals-bridge" Mode="rw" Description="Garmin session, original FIT files, daily archive. Private. Must be writable for user id 10001." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/garmin-intervals-bridge</Config>
+  <Config Name="Web page port" Target="8765" Default="8765" Mode="tcp" Description="The bridge's web page: status, Garmin sign-in (MFA), settings, actions" Type="Port" Display="always" Required="false" Mask="false">8765</Config>
+  <Config Name="Web page" Target="BRIDGE_UI_PORT" Default="8765" Mode="" Description="Port of the web page inside the container; empty = no web page" Type="Variable" Display="advanced" Required="false" Mask="false">8765</Config>
+  <Config Name="Web page password" Target="BRIDGE_UI_PASSWORD" Default="" Mode="" Description="Your own, 8 characters or more; the web page asks for it" Type="Variable" Display="always" Required="true" Mask="true"/>
   <Config Name="ImReady4 training advice" Target="BRIDGE_IMREADY4_ENABLED" Default="false" Mode="" Description="true: fill the TrainingAdvice wellness field each morning (docs/IMREADY4.md)" Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
   <Config Name="HRV trend advice (experimental)" Target="BRIDGE_HRVTREND_ENABLED" Default="false" Mode="" Description="true: an advice from the 7-day HRV trend into its own field (docs/HRV_TREND.md)" Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
 </Container>

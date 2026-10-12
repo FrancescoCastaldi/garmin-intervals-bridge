@@ -63,6 +63,7 @@ In Terminal, `cd ~/GarminBridge` first:
 
 | | |
 | --- | --- |
+| Status, Garmin sign-in, settings, gear – in the browser | `venv/bin/garmin-intervals-bridge ui` |
 | Is it running? | `venv/bin/garmin-intervals-bridge autostart --status` |
 | What did it do? | `tail -f bridge.log` (`Ctrl`+`C` ends watching, not the bridge) |
 | Change a setting | `venv/bin/garmin-intervals-bridge setup` (your answers are the defaults) |

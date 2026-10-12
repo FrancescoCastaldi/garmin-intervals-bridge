@@ -480,7 +480,9 @@ def test_the_templates_are_well_formed(tmp_path):
     project = yaml.safe_load(guide.split("```yaml\n", 1)[1].split("```", 1)[0])
     bridge = project["services"]["bridge"]
     assert bridge["command"] == ["run"] and bridge["volumes"] == ["./data:/data"]
-    assert set(bridge["environment"]) == {"INTERVALS_API_KEY", "BRIDGE_TIMEZONE"}
+    assert set(bridge["environment"]) == {"INTERVALS_API_KEY", "BRIDGE_TIMEZONE", "BRIDGE_UI_PORT",
+                                          "BRIDGE_UI_PASSWORD"}
+    assert bridge["environment"]["BRIDGE_UI_PASSWORD"] == "change-me-please"           # refused as it is
 
 
 def test_setup_names_commands_the_way_this_person_starts_the_bridge(_empty_home, monkeypatch):

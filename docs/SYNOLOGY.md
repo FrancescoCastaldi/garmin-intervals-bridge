@@ -36,17 +36,22 @@ services:
     environment:
       INTERVALS_API_KEY: "paste-your-key-here"   # Intervals.icu: Settings, Developer Settings, API key
       BRIDGE_TIMEZONE: "Europe/London"           # yours: which date last night's sleep belongs to
+      BRIDGE_UI_PORT: "8765"                     # the bridge's web page
+      BRIDGE_UI_PASSWORD: "change-me-please"     # your own password for that page, 8+ characters
       # BRIDGE_IMREADY4_ENABLED: "true"          # ImReady4's training advice, see docs/IMREADY4.md
+    ports:
+      - "8765:8765"
     volumes:
       - ./data:/data
     restart: unless-stopped
     init: true
 ```
 
-Change the two values in quotes: your **API key** and your **time zone**
-(Region/City, e.g. `Europe/Dublin`, `America/New_York`). *Next*, skip the
-web portal (the bridge has none yet), *Done*: Container Manager downloads
-the image and starts the bridge.
+Change three values in quotes: your **API key**, your **time zone**
+(Region/City, e.g. `Europe/Dublin`, `America/New_York`) and a **password**
+of your own for the bridge's web page (8 characters or more; the bridge
+refuses the placeholder). *Next*, skip the web portal settings, *Done*:
+Container Manager downloads the image and starts the bridge.
 
 Under *Container → garmin-intervals-bridge → Log* it begins with
 `garmin-intervals-bridge <version> running …` and the day boundary; then it
@@ -54,28 +59,28 @@ reports that a Garmin login is needed and waits.
 
 ## 3. Sign in to Garmin once
 
-*Container → garmin-intervals-bridge → Action → Open terminal* (or *Details
-→ Terminal*) → *Create* opens a shell inside the running container. Type:
+Open the bridge's web page in your browser: **`http://<your NAS>:8765`**
+(the address you use for DSM, with `:8765` instead of DSM's port), sign in
+with the password from step 2, then **Garmin** → your Garmin Connect e-mail
+and password → *Sign in*, and the code if Garmin sends one. The password is
+used once and not stored; the session lands in your `data` folder and
+renews itself for about a year, and the bridge starts working within a
+minute. If Garmin answers "429", wait an hour – Garmin rate-limits
+sign-ins.
 
-```bash
-garmin-intervals-bridge login
-```
+The page is plain http: use it at home, or put it behind DSM's reverse proxy
+(*Control Panel → Login Portal → Advanced → Reverse Proxy*) for https. It
+also shows what the bridge is doing (*Status*), sets up gear and charts
+(*Actions*) and shows the log.
 
-Enter your Garmin Connect e-mail, password and, if asked, the MFA code. The
-password is used once and not stored; the session lands in your `data`
-folder and renews itself for about a year. The running bridge picks it up
-on its own within 15 minutes. If Garmin answers "429" or "too many
-requests", wait an hour – Garmin rate-limits sign-ins.
+Without the web page (no `BRIDGE_UI_…` lines and no `ports`): *Container →
+garmin-intervals-bridge → Action → Open terminal* → *Create*, and type
+`garmin-intervals-bridge login`.
 
 ## 4. See what it would do
 
-The *Log* now lists what the dry run would enrich and write. The same
-terminal also answers questions while the bridge runs:
-
-```bash
-garmin-intervals-bridge --version
-garmin-intervals-bridge status
-```
+The container's *Log* (or the web page's *Log*) now lists what the dry run
+would enrich and write.
 
 ## 5. Let it write
 
@@ -98,7 +103,8 @@ every 30 minutes and writes a health line once a day.
 
 ## 6. Your gear (optional)
 
-In the container's terminal:
+On the web page: *Actions → Show the gear plan*, then *Apply this plan*. Or
+in the container's terminal:
 
 ```bash
 garmin-intervals-bridge gear                                        # the plan

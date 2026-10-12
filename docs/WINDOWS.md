@@ -55,6 +55,7 @@ PowerShell window:
 
 | | |
 | --- | --- |
+| Status, Garmin sign-in, settings, gear – in the browser | `py -m garmin_intervals_bridge ui` |
 | Is it running? | `py -m garmin_intervals_bridge autostart --status` |
 | What did it do? | `notepad $HOME\GarminBridge\bridge.log` |
 | Change a setting | `py -m garmin_intervals_bridge setup` (your answers are the defaults) |

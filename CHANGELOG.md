@@ -29,6 +29,12 @@ hand-made logon task / launch file.
 - When Garmin's session ends, a bridge running with `--apply` puts one note in the
   Intervals calendar ("Garmin bridge: Garmin login needed"), once per episode, never
   deleted by the bridge (`BRIDGE_INTERVALS_NOTES=false` turns it off).
+- `ui` and `BRIDGE_UI_PORT`: the bridge's web page – status in plain words, Garmin
+  sign-in with MFA (a waiting bridge goes on within a minute), settings, gear and chart
+  plans with a confirm button, today's training advice, the log. Local with a random
+  key in the link; on the network only with `BRIDGE_UI_PASSWORD`. Standard library only.
+- Settings from a Home Assistant add-on's `/data/options.json` (`BRIDGE_OPTIONS_FILE`)
+  when there is no settings file.
 - Unraid container template (`deploy/unraid/`, `docs/UNRAID.md`).
 - A data folder the container cannot write to is reported in words, with the fix.
 
@@ -36,8 +42,10 @@ hand-made logon task / launch file.
 
 - `compose.yaml` keeps the bridge running (`run`, a dry run until you make it
   `run --apply`; restarts with the machine). Cron users schedule `compose run` as before.
-- Synology: a project file to paste instead of clicking a container together
-  (`docs/SYNOLOGY.md`); Windows and Mac guides are three steps now.
+- Synology: a project file to paste instead of clicking a container together, Garmin
+  sign-in on the web page instead of the container terminal (`docs/SYNOLOGY.md`);
+  Windows and Mac guides are three steps now.
+- The log file is readable by its owner only.
 
 ## 0.7.1 — 2026-10-12
 

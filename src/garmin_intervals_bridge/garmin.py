@@ -170,6 +170,7 @@ class GarminSource:
         self.delay = delay
         self.client: Any | None = None
         self.requests = 0        # Garmin requests this process made; recorded per run, summed by `health`
+        self._pending: Any | None = None     # a web sign-in waiting for its MFA code
 
     def login(self, interactive: bool = True) -> None:
         from garminconnect import Garmin, GarminConnectAuthenticationError
@@ -208,6 +209,44 @@ class GarminSource:
             self.client = api
         finally:
             password = None
+
+    # ---- sign-in from a web page: the password now, the MFA code in a second request ----
+
+    def start_login(self, email: str, password: str) -> str:
+        """'done' when signed in, 'mfa' when Garmin wants a code (then `finish_login`).
+
+        Credentials only, never the saved session: this is the way to replace an expired one.
+        The password goes to Garmin and is dropped; only the session tokens are saved.
+        """
+        from garminconnect import Garmin
+        api = Garmin(email=email, password=password, retry_attempts=1, return_on_mfa=True)
+        try:
+            status, _ = api.login()
+        except Exception as exc:
+            api.password = None
+            if _is_blocked(exc) or _is_transient(exc):
+                raise GarminBlocked(f"Garmin refused the sign-in for now: {type(exc).__name__}") from exc
+            raise
+        api.password = None
+        if status == "needs_mfa":
+            self._pending = api
+            return "mfa"
+        self._save_session(api)
+        return "done"
+
+    def finish_login(self, code: str) -> None:
+        api = self._pending
+        if api is None:
+            raise ValueError("No sign-in waiting for a code; start again")
+        api.resume_login(None, code.strip())          # a wrong code keeps it waiting for another try
+        self._pending = None
+        self._save_session(api)
+
+    def _save_session(self, api: Any) -> None:
+        self.token_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        api.client.dump(str(self.token_dir))
+        self.client = None
+        self.login(interactive=False)                 # load it back the way every run does
 
     def _client(self) -> Any:
         if self.client is None:
