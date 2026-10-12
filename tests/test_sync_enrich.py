@@ -139,3 +139,18 @@ def test_scheduled_enrich_isolates_a_broken_activity(tmp_path):
     assert m["failed"] == 1 and m["enriched"] == 1
     assert st.activity_status("41") == "failed"
     st.close()
+
+
+def test_one_activity_again_after_intervals_reprocess_file(tmp_path):
+    from garmin_intervals_bridge.enrich import enrich_activity, resolve_one
+    st, g, i = Store(tmp_path), GarminFake(), IntervalsFake()
+    sync_enrich(settings(tmp_path), g, i, st, apply=True, today=date(2026, 10, 8))
+    i.activity_obj["AerobicEffect"] = 0.0                     # "Reprocess file": the filtered copy's value again
+    i.activity_obj["external_id"] = "42"                      # what the official sync stores
+    gid, iid = resolve_one(i, "https://intervals.icu/activities/i42")
+    assert (gid, iid) == ("42", "i42")
+    assert enrich_activity(gid, g, i, st, apply=True, intervals_id=iid)["outcome"] == "already_enriched"
+    plan = enrich_activity(gid, g, i, st, apply=True, intervals_id=iid, refresh_own=True, recheck=True)
+    assert plan["outcome"] == "enriched" and i.updates[-1] == ("i42", {"AerobicEffect": 3.2})
+    assert g.downloads == 1                                    # the archived original, not a new download
+    st.close()

@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.8.1 — 2026-10-12
+
+One activity again, the easy way – thanks @DarKen.
+
+### Changed
+
+- `enrich` needs only the Intervals activity: `enrich --intervals-id <id or its link>
+  --apply`. It compares with what Intervals holds now (also when the bridge had
+  finished with it), rewrites its own streams, and works next to a running bridge
+  (`run`, a container) instead of stopping at "Another bridge instance is running".
+  The use: Intervals' *Reprocess file* re-reads its own filtered copy and drops what
+  the bridge added; a new custom field or stream for an older activity.
+- The web page's *Actions* do the same ("One activity again"), showing first what the
+  activity gets.
+
+### Documentation
+
+- *Reprocess file* and how to undo its effect (README, guides); Synology on older DSM
+  with the Docker package instead of Container Manager.
+
 ## 0.8.0 — 2026-10-12
 
 Set up by answering questions, run in the background without a window, sign in to

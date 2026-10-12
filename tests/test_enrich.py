@@ -208,3 +208,24 @@ def test_stream_plan_skips_existing_absent_and_misaligned():
     # Original without stamina -> nothing to write
     none = plan_streams({"record": [{"timestamp": 1000, "stance_time": 1.0}]}, {"stream_types": []}, [0], m)
     assert none["skipped"]["Stamina"] == "not in original"
+
+
+def test_an_intervals_link_or_id_names_one_activity_and_its_garmin_original():
+    import pytest
+
+    from garmin_intervals_bridge.enrich import garmin_id_from, intervals_id_from, resolve_one
+    for text in ("i12345678", "12345678", "https://intervals.icu/activities/i12345678",
+                 "https://intervals.icu/activities/i12345678/data?x=1", " i12345678 "):
+        assert intervals_id_from(text) == "i12345678", text
+    with pytest.raises(ValueError, match="activity id"):
+        intervals_id_from("https://intervals.icu/wellness")
+    assert garmin_id_from("24544097680") == "24544097680"                  # the official sync
+    assert garmin_id_from("24544097680_ACTIVITY.fit") == "24544097680"     # Garmin's export uploaded by hand
+    assert garmin_id_from("garmin:24544097680") == "24544097680"           # the bridge's own upload
+    assert garmin_id_from("18234567.fit") is None and garmin_id_from(None) is None
+
+    class Strava:
+        def activity(self, iid):
+            return {"id": iid, "source": "STRAVA", "external_id": None}
+    with pytest.raises(ValueError, match="did not come from Garmin"):
+        resolve_one(Strava(), "i1")

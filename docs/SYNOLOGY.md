@@ -156,6 +156,20 @@ always` fetches the newest image, your settings and data stay. Once a day
 the bridge says in its log when a newer version exists; the first log line
 shows which version runs.
 
+## Older DSM: the Docker package
+
+Before DSM 7.2 the app is called *Docker* and has no projects. Make the
+container by hand instead: *Registry* → download
+`futurewebat/garmin-intervals-bridge`; *Image* → *Launch* → *Advanced
+settings*: auto-restart on; *Volume* → your `data` folder from step 1 mounted
+at `/data`; *Port settings* (only for the web page) → local port `8765` to
+container port `8765`; *Environment* → the variables of the project file
+above (`INTERVALS_API_KEY`, `BRIDGE_TIMEZONE`, and if you want the web page
+`BRIDGE_UI_PORT` and `BRIDGE_UI_PASSWORD`); execution command `run`, later
+`run --apply`. Updating: download the new tag, stop the container, *Action →
+Clear* (or delete and recreate it with the same settings – the data folder
+keeps everything).
+
 ## If something goes wrong
 
 - *"The data folder /data is not writable"*: the permission of step 1 is
@@ -164,6 +178,9 @@ shows which version runs.
   needed" in your Intervals calendar: step 3 again.
 - *"Another bridge instance is running"*: two containers use the same data
   folder; stop one.
+- Garmin's values gone from an activity after Intervals' *Reprocess file*:
+  web page → *Actions → One activity again*, or in the terminal
+  `garmin-intervals-bridge enrich --intervals-id <the activity's link> --apply`.
 - Times or dates a few hours off: `BRIDGE_TIMEZONE` is missing or wrong (the
   log's second line says which zone it uses).
 - Questions and reports: the forum thread above, or

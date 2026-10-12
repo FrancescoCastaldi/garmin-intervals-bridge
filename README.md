@@ -157,7 +157,7 @@ run is exactly what `--apply` would send.
 | `probe [--activity-id]` | Download and archive one original FIT. |
 | `gap --activity-id` | Original vs. the copy Intervals holds; lists everything only the original carries. |
 | `compare-fit A B` | Same comparison for two local files (e.g. against a manual browser export). |
-| `enrich --activity-id [--apply] [--refresh-own-streams]` | Plan or perform the enrichment of one activity. |
+| `enrich --intervals-id <id or link> [--apply]` | One activity again, compared with what Intervals holds now – after Intervals' *Reprocess file*, or a new custom field or stream. Works next to a running bridge; `--activity-id <garmin id>` instead names the Garmin side. |
 | `watch [--apply]` | Poll Intervals once (~450 bytes); enrich activities seen for the first time. |
 | `sync [--scope all\|activities\|wellness] [--mode enrich\|upload] [--apply]` | Scheduled run over the last days. |
 | `backfill --scope wellness\|activities --from DATE [--to DATE] [--apply]` | Paced, resumable run over the past. |
@@ -510,6 +510,10 @@ win. Relative paths in a settings file count from its folder.
   of the forms `activity.X / 60`, `activity.X == 0 ? NaN : activity.X / 36`
   and stream scripts reading one `m.f_<n>` with constant factors are
   understood; anything else is listed as unsupported and left alone.
+- **Intervals' "Reprocess file" undoes the enrichment** of that activity: Intervals
+  re-reads its own, filtered copy. `enrich --intervals-id <link> --apply` (or the web
+  page's *Actions → One activity again*) puts Garmin's values back. In upload mode
+  Intervals holds the original itself, and reprocessing keeps everything.
 - **Manual activities** (no device file) are skipped. **Strava-sourced**
   activities are never touched.
 - One Garmin account and one Intervals athlete per data directory.
@@ -524,6 +528,7 @@ win. Relative paths in a settings file count from its folder.
 | `Garmin login needed` (also as a note in the Intervals calendar) | Run `login` interactively in the same environment the service uses. |
 | `429` during `login` | The mobile login path was refused; the web path usually follows. Do not retry in a loop. |
 | `Another bridge instance is running (wellness)` | A backfill holds that scope's lock; activities keep running. |
+| Garmin values gone after *Reprocess file* in Intervals | `enrich --intervals-id <the activity's link> --apply`, or the web page's *Actions → One activity again*. |
 | `outcome: unmatched` | The official import has not created the activity yet; the next run looks again. |
 | `status` lists a *pending* upload | Upload mode: the request's outcome is unknown. Check Intervals before `reset-pending`. |
 | `203/EXEC Permission denied` under systemd | SELinux: the virtualenv must not live under a web document root. |

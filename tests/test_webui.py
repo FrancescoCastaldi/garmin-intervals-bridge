@@ -284,3 +284,27 @@ def test_alerts_are_set_on_the_settings_page_and_tested(page, env, monkeypatch):
     call(page, "POST", "/settings", {**form, "smtp_password": "", "push": ""}, cookie=cookie)
     values = config.parse_env_file(env)
     assert values["BRIDGE_SMTP_PASSWORD"] == "abcd efgh ijkl mnop" and values["BRIDGE_NTFY_URL"] == ""
+
+
+def test_one_activity_again_shows_what_it_gets_then_writes(page, env, monkeypatch):
+    calls = []
+    monkeypatch.setattr(webui, "resolve_one", lambda iv, ref: ("42", "i42") if "i42" in ref else
+                        (_ for _ in ()).throw(ValueError("Intervals activity i9 did not come from Garmin")))
+
+    def enrich(gid, garmin, iv, store, *, apply, intervals_id, refresh_own, recheck):
+        calls.append((gid, intervals_id, apply, refresh_own, recheck))
+        return {"outcome": "enriched" if apply else "planned",
+                "fields": {"writes": {"AerobicEffect": 3.2}}, "streams": {"writes": [{"type": "Stamina"}]}}
+    monkeypatch.setattr(webui, "enrich_activity", enrich)
+    cookie = signed_in(page)
+    token = csrf(call(page, "GET", "/actions", cookie=cookie)[2])
+    assert "did not come from Garmin" in call(page, "POST", "/actions/enrich", {"csrf": token, "activity": "i9"},
+                                              cookie=cookie)[2]
+    text = call(page, "POST", "/actions/enrich", {"csrf": token, "activity": "https://intervals.icu/activities/i42"},
+                cookie=cookie)[2]
+    assert "AerobicEffect" in text and "Stamina" in text and "Write these values" in text
+    assert calls == [("42", "i42", False, True, True)]
+    text = call(page, "POST", "/actions/enrich-apply", {"csrf": token}, cookie=cookie)[2]
+    assert calls[-1] == ("42", "i42", True, True, True) and "written" in text
+    assert "Choose the activity first" in call(page, "POST", "/actions/enrich-apply", {"csrf": token},
+                                               cookie=cookie)[2]

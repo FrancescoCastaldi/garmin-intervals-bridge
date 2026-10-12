@@ -566,3 +566,18 @@ def test_login_works_next_to_a_running_bridge(tmp_path, monkeypatch):
     with single_instance(tmp_path, ("activities", "wellness")):
         assert cli.main(["login"]) == 0
     assert logins == [True]
+
+
+def test_enrich_one_activity_runs_next_to_a_running_bridge(tmp_path, monkeypatch, capsys):
+    from garmin_intervals_bridge import cli
+    monkeypatch.setenv("BRIDGE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("INTERVALS_API_KEY", "not-a-real-key")
+    monkeypatch.setattr(cli.GarminSource, "login", lambda self, interactive=True: None)
+    monkeypatch.setattr(cli, "resolve_one", lambda iv, ref: ("42", "i42"))
+    seen = {}
+    monkeypatch.setattr(cli, "enrich_activity", lambda gid, g, iv, st, **k: seen.update(gid=gid, **k)
+                        or {"outcome": "planned"})
+    with single_instance(tmp_path, ("activities", "wellness")):                # `run` holds these
+        assert main(["enrich", "--intervals-id", "https://intervals.icu/activities/i42"]) == 0
+    assert seen["gid"] == "42" and seen["intervals_id"] == "i42" and seen["recheck"] and seen["refresh_own"]
+    assert main(["enrich"]) == 1                                                # names no activity

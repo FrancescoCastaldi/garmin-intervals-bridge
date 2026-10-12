@@ -477,9 +477,42 @@ def plan_streams(messages: dict[str, list[dict]], activity: dict, time_stream: l
 # One activity, end to end
 # ---------------------------------------------------------------------------
 
+GARMIN_EXTERNAL = re.compile(r"(?:garmin:)?(\d{1,20})(?:_.*)?")
+
+
+def intervals_id_from(text: str) -> str:
+    """'i12345', '12345' or an activity link (https://intervals.icu/activities/i12345) -> 'i12345'."""
+    found = re.search(r"/activities/(i?\d{1,20})(?![\d])", text) or re.fullmatch(r"\s*(i?\d{1,20})\s*", text)
+    if not found:
+        raise ValueError("Give an Intervals activity id like i12345678, or the activity's link")
+    value = found.group(1)
+    return value if value.startswith("i") else f"i{value}"
+
+
+def garmin_id_from(external_id: object) -> str | None:
+    """The Garmin activity id an Intervals activity carries: the official sync stores it bare,
+    a manual upload of Garmin's export as `<id>_ACTIVITY.fit`, the bridge's own upload as `garmin:<id>`."""
+    if not isinstance(external_id, str):
+        return None
+    found = GARMIN_EXTERNAL.fullmatch(external_id.strip())
+    return found.group(1) if found else None
+
+
+def resolve_one(intervals: Any, reference: str) -> tuple[str, str]:
+    """(Garmin id, Intervals id) of the Intervals activity a person points at."""
+    intervals_id = intervals_id_from(reference)
+    activity = intervals.activity(intervals_id)
+    garmin_id = garmin_id_from(activity.get("external_id"))
+    if garmin_id is None:
+        raise ValueError(f"Intervals activity {intervals_id} did not come from Garmin "
+                         f"(source {activity.get('source') or 'unknown'}); there is no Garmin original for it")
+    return garmin_id, intervals_id
+
+
 def enrich_activity(gid: str, garmin: Any, intervals: Any, store: Any, *, apply: bool,
                     remote_candidates: list[dict] | None = None, intervals_id: str | None = None,
-                    mappings: FieldMappings | None = None, refresh_own: bool = False) -> dict:
+                    mappings: FieldMappings | None = None, refresh_own: bool = False,
+                    recheck: bool = False) -> dict:
     """Download (or reuse) the original, find the Intervals activity, plan, optionally write.
 
     Returns the plan plus an `outcome`:
@@ -488,6 +521,10 @@ def enrich_activity(gid: str, garmin: Any, intervals: Any, store: Any, *, apply:
       nothing_to_add    the partner copy lacks nothing the athlete's fields could take
       planned           writes identified, dry run
       enriched          writes performed
+
+    `recheck` (one activity on request) compares with what Intervals holds now even when
+    nothing changed on the bridge's side – after Intervals' "Reprocess file", say, which
+    drops everything the bridge added.
     """
     from .fit import decode_fit, extract_original_fit, sha256  # local import keeps fit optional for tests
 
@@ -517,7 +554,7 @@ def enrich_activity(gid: str, garmin: Any, intervals: Any, store: Any, *, apply:
         mappings = load_field_mappings(intervals.custom_items())
     signature = mapping_signature(mappings)
     if (previous and previous["sha256"] == digest and previous["intervals_id"] == intervals_id
-            and previous.get("mapping") == signature and not refresh_own):
+            and previous.get("mapping") == signature and not refresh_own and not recheck):
         return {"activity_id": gid, "intervals_id": intervals_id, "outcome": "already_enriched",
                 "previous_enrichment": previous}
 

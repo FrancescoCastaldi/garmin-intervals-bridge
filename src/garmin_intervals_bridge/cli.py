@@ -14,7 +14,7 @@ from pathlib import Path
 from . import __version__, alerts, autostart, hrvtrend, imready4, notices, webui, wizard
 from .charts import setup_charts
 from .config import Settings, configured_log_file
-from .enrich import enrich_activity, gap_report, match_activity
+from .enrich import enrich_activity, gap_report, intervals_id_from, match_activity, resolve_one
 from .fit import compare_fit, extract_original_fit, sha256
 from .garmin import DAY_ENDPOINTS, GarminBlocked, GarminLoginNeeded, GarminSource, parse_endpoints
 from .gear import SensorCache as GearSensors
@@ -75,13 +75,15 @@ def build_parser() -> argparse.ArgumentParser:
                                      "(works next to a running bridge)")
     gap.add_argument("--activity-id", required=True, help="Garmin Connect activity ID")
     gap.add_argument("--intervals-id", help="Intervals activity ID (default: match automatically)")
-    enrich = sub.add_parser("enrich", help="Fill the Intervals activity's custom fields/streams "
-                                           "from the Garmin original (dry run unless --apply)")
-    enrich.add_argument("--activity-id", required=True, help="Garmin Connect activity ID")
-    enrich.add_argument("--intervals-id", help="Intervals activity ID (default: match automatically)")
+    enrich = sub.add_parser("enrich", help="One activity again: fill its custom fields/streams from the Garmin "
+                                           "original, compared with what Intervals holds now – e.g. after "
+                                           "Intervals' 'Reprocess file' (dry run unless --apply; works next to "
+                                           "a running bridge)")
+    enrich.add_argument("--activity-id", help="Garmin Connect activity ID")
+    enrich.add_argument("--intervals-id", help="Intervals activity ID or its link; enough on its own")
     enrich.add_argument("--apply", action="store_true", help="Actually PUT fields and streams")
     enrich.add_argument("--refresh-own-streams", action="store_true",
-                        help="Rewrite streams this bridge wrote before (e.g. after a mapping fix)")
+                        help="(always on now) rewrite the streams this bridge wrote before")
     setup = sub.add_parser("setup-fields", help="Preview/create missing private numeric custom fields")
     setup.add_argument("--apply", action="store_true", help="Actually create missing custom fields")
     sync = sub.add_parser("sync", help="Synchronize (local archive only / dry-run by default)")
@@ -389,6 +391,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "compare-fit":
             print(json.dumps(compare_fit(args.file_a, args.file_b), indent=2))
             return 0
+        if args.cmd == "enrich" and not (args.activity_id or args.intervals_id):
+            raise ValueError("enrich needs the Intervals activity: --intervals-id i12345678 (or its link)")
         if args.env_file:
             os.environ["BRIDGE_ENV_FILE"] = str(args.env_file)
         if args.cmd == "setup":
@@ -427,6 +431,8 @@ def main(argv: list[str] | None = None) -> int:
                        else ("health",) if args.cmd == "health"
                        # gear touches only the gear field: next to a running `run`, only not twice at once
                        else ("gear",) if args.cmd == "gear"
+                       # one activity on request: next to a running `run`, writes are idempotent
+                       else ("enrich",) if args.cmd == "enrich"
                        else ("imready4",) if args.cmd == "imready4"
                        else ("hrvtrend",) if args.cmd == "hrvtrend"
                        # read-only diagnosis must work next to a running `run`: no shared state written
@@ -564,8 +570,11 @@ def main(argv: list[str] | None = None) -> int:
                     return 0
                 if args.cmd == "enrich":
                     intervals = IntervalsClient(settings.intervals_api_key, settings.intervals_athlete_id)
-                    plan = enrich_activity(args.activity_id, garmin, intervals, store, apply=args.apply,
-                                           intervals_id=args.intervals_id, refresh_own=args.refresh_own_streams)
+                    gid, iid = args.activity_id, intervals_id_from(args.intervals_id) if args.intervals_id else None
+                    if gid is None:
+                        gid, iid = resolve_one(intervals, args.intervals_id)
+                    plan = enrich_activity(gid, garmin, intervals, store, apply=args.apply, intervals_id=iid,
+                                           refresh_own=True, recheck=True)
                     print(json.dumps(plan, indent=2, default=str))
                     return 0
                 if args.cmd == "probe":

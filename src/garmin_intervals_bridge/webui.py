@@ -38,6 +38,7 @@ import requests
 from . import __version__, alerts, autostart, hrvtrend, imready4, notices
 from .charts import setup_charts
 from .config import Settings
+from .enrich import enrich_activity, resolve_one
 from .garmin import GarminBlocked, GarminSource
 from .gear import apply_plan as apply_gear_plan
 from .gear import build_plan as build_gear_plan
@@ -107,6 +108,7 @@ class Session:
         self.garmin_since = 0.0
         self.gear_plan: dict | None = None           # the plan shown, applied exactly as shown
         self.gear_options: dict = {}
+        self.activity: tuple[str, str] | None = None  # (Garmin id, Intervals id) shown, to fill in again
 
 
 class Reply(Exception):
@@ -451,6 +453,8 @@ class UI:
             "Show the gear plan")
         charts_form = self.form(session, "/actions/charts", "", "Show the chart plan")
         advice_form = self.form(session, "/actions/advice", "", "Show today's advice")
+        one_form = self.form(session, "/actions/enrich", '<label>Intervals activity: its link or id (i12345678) '
+                             '<input type="text" name="activity" required></label>', "Show what it gets")
         return self.page(session, "Actions", f'{message}'
                          '<section><h2>Gear</h2><p>Puts the bike or shoes Garmin recorded on the Intervals activities '
                          f'the bridge has archived. You see the plan first; nothing is written before you confirm.</p>'
@@ -458,7 +462,10 @@ class UI:
                          '<section><h2>Charts</h2><p>Charts for the Garmin values on Intervals\' Fitness page '
                          f'(private; existing charts are only completed).</p>{charts_form}</section>'
                          '<section><h2>Training advice</h2><p>What ImReady4\'s rules and the HRV trend say for today '
-                         f'(read only).</p>{advice_form}</section>')
+                         f'(read only).</p>{advice_form}</section>'
+                         '<section><h2>One activity again</h2><p>Puts Garmin\'s values back into one activity – after '
+                         'Intervals\' "Reprocess file", which drops them, or after you added a custom field or stream. '
+                         f'You see what it gets first.</p>{one_form}</section>')
 
     def _intervals(self, settings: Settings) -> Any:
         return self.intervals_client(settings.intervals_api_key, settings.intervals_athlete_id)
@@ -511,6 +518,56 @@ class UI:
         return self.actions_page(session, f'<section><p class="ok"><b>Done:</b> {done["written"]} activities, '
                                           f'{len(done["created"])} gear created, {done["failed"]} failed.</p>'
                                           '</section>')
+
+    def _one(self, session: Session, apply: bool) -> tuple[dict, str]:
+        settings = self.settings()
+        gid, iid = session.activity or ("", "")
+        store = Store(settings.data_dir)
+        try:
+            with single_instance(settings.data_dir, ("enrich",)):
+                garmin = self.garmin_source(settings.token_dir, settings.garmin_request_delay)
+                plan = enrich_activity(gid, garmin, self._intervals(settings), store, apply=apply, intervals_id=iid,
+                                       refresh_own=True, recheck=True)
+        finally:
+            store.close()
+        fields = sorted((plan.get("fields") or {}).get("writes") or {})
+        streams = [w["type"] for w in (plan.get("streams") or {}).get("writes") or []]
+        what = (f"fields: {', '.join(fields) or 'none'}; streams: {', '.join(streams) or 'none'}")
+        return plan, what
+
+    def enrich_post(self, session: Session, query: dict, form: dict) -> str:
+        settings = self.settings()
+        try:
+            session.activity = resolve_one(self._intervals(settings), form.get("activity", ""))
+        except (ValueError, requests.RequestException) as exc:
+            text = str(exc) if isinstance(exc, ValueError) else "Intervals does not know this activity."
+            return self.actions_page(session, f'<section><p class="bad">{esc(text)}</p></section>')
+        try:
+            plan, what = self._one(session, apply=False)
+        except InstanceBusy:
+            return self.actions_page(session, '<p class="warn">Another activity is being filled in; try again in '
+                                              'a minute.</p>')
+        gid, iid = session.activity
+        if plan["outcome"] != "planned":
+            text = {"nothing_to_add": "It has everything Garmin's original can give it.",
+                    "unmatched": "Intervals does not have this activity yet."}.get(plan["outcome"], plan["outcome"])
+            return self.actions_page(session, f'<section><p>{esc(iid)}: {esc(text)}</p></section>')
+        confirm = self.form(session, "/actions/enrich-apply", "", "Write these values")
+        return self.page(session, f"Activity {iid}", f'<section><p>From Garmin\'s original (activity {esc(gid)}) '
+                         f'it gets {esc(what)}.</p>{confirm}</section>')
+
+    def enrich_apply(self, session: Session, query: dict, form: dict) -> str:
+        if session.activity is None:
+            return self.actions_page(session, '<p class="warn">Choose the activity first.</p>')
+        try:
+            plan, what = self._one(session, apply=True)
+        except InstanceBusy:
+            return self.actions_page(session, '<p class="warn">Another activity is being filled in; try again in '
+                                              'a minute.</p>')
+        iid, session.activity = session.activity[1], None
+        done = "written" if plan["outcome"] == "enriched" else "nothing to write any more"
+        return self.actions_page(session, f'<section><p class="ok"><b>{esc(iid)}:</b> {esc(done)} ({esc(what)}).'
+                                          '</p></section>')
 
     def charts_post(self, session: Session, query: dict, form: dict) -> str:
         settings = self.settings()
@@ -575,7 +632,8 @@ GET_PAGES = {"/": "status", "/garmin": "garmin", "/settings": "settings", "/acti
 POST_PAGES = {"/garmin": "garmin_post", "/garmin/mfa": "garmin_mfa", "/settings": "settings_post",
               "/settings/test": "alert_test",
               "/restart": "restart_post", "/actions/gear": "gear_post", "/actions/gear-apply": "gear_apply",
-              "/actions/charts": "charts_post", "/actions/advice": "advice_post"}
+              "/actions/charts": "charts_post", "/actions/advice": "advice_post", "/actions/enrich": "enrich_post",
+              "/actions/enrich-apply": "enrich_apply"}
 
 
 def handler_for(ui: UI) -> type[BaseHTTPRequestHandler]:
