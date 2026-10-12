@@ -24,12 +24,15 @@ class FakeIntervals:
         return {"name": "Ann"}
 
 
+GARMIN_PASSWORD = "Garmin-Secret-7f3k"        # distinctive: a random CSRF token never contains it
+
+
 class FakeGarmin:
     def __init__(self, token_dir, delay):
         self.token_dir = token_dir
 
     def start_login(self, email, password):
-        assert password == "pw" and email == "ann@example.com"
+        assert password == GARMIN_PASSWORD and email == "ann@example.com"
         return "mfa"
 
     def finish_login(self, code):
@@ -134,9 +137,9 @@ def test_garmin_sign_in_with_mfa_ends_the_login_episode(page, env):
     text = call(page, "GET", "/", cookie=cookie)[2]
     assert "sign-in needed" in text
     token = csrf(call(page, "GET", "/garmin", cookie=cookie)[2])
-    status, _, text = call(page, "POST", "/garmin", {"csrf": token, "email": "ann@example.com", "password": "pw"},
+    status, _, text = call(page, "POST", "/garmin", {"csrf": token, "email": "ann@example.com", "password": GARMIN_PASSWORD},
                            cookie=cookie)
-    assert status == 200 and 'name="code"' in text and "pw" not in text.replace("password", "")
+    assert status == 200 and 'name="code"' in text and GARMIN_PASSWORD not in text            # never echoed
     text = call(page, "POST", "/garmin/mfa", {"csrf": token, "code": "000000"}, cookie=cookie)[2]
     assert "did not accept the code" in text and 'name="code"' in text                   # try again
     text = call(page, "POST", "/garmin/mfa", {"csrf": token, "code": "123456"}, cookie=cookie)[2]
