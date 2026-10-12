@@ -12,7 +12,8 @@
 > (night SpO₂, respiration, sleeping HR, Body Battery, HRV details, sleep stages, stress,
 > readiness, logged nutrition and total burn, endurance & hill scores, race predictions,
 > fitness age, Health Snapshots …), puts your Garmin gear (bikes, shoes, skis) on the activities,
-> backfills the past, and comes with 20 charts for all of it in Intervals' chart library. Runs on
+> can write ImReady4's daily training advice for you, backfills the past, and comes with 20
+> charts for all of it in Intervals' chart library. Runs on
 > Linux (systemd timers), in a container, or on **Windows or a Mac with a few copy-and-paste
 > commands** (guides for [Windows](docs/WINDOWS.md) and [Mac](docs/MAC.md)).
 
@@ -144,6 +145,7 @@ run is exactly what `--apply` would send.
 | `setup-fields [--apply]` | Create the private custom wellness fields the mapping uses. |
 | `setup-charts [--apply]` | Create (and later complete) private fitness charts for the synced values. |
 | `gear [--prefer intervals\|evidence\|garmin] [--map G=I] [--create] [--apply]` | Put Garmin's gear (bikes, shoes, skis …) on the Intervals activities, from the archive; see [Gear](#gear). |
+| `imready4 [--date D \| --from D [--to D]] [--compare] [--apply] [--overwrite]` | ImReady4-compatible training advice into `TrainingAdvice`: preview, comparison with existing values, filling the past; see [Training advice](#training-advice-imready4). |
 | `status` | Pending uploads and failed activities with their retry time. |
 | `health` | Daily digest: probes both services and reports errors that would otherwise stay silent (dead timers, endpoints failing for days, fields Garmin stopped delivering, activities failing repeatedly). Exit 2 only when a human is needed. |
 
@@ -255,6 +257,24 @@ garmin-intervals-bridge gear …` (it does not wait for the running bridge).
   --archive-only` adds once (a few Garmin requests per activity; stop a
   running container for it). Activities from Strava cannot be changed through
   Intervals' API and are left alone.
+
+## Training advice (ImReady4)
+
+If you use [ImReady4](https://forum.intervals.icu/t/how-to-guide-imready4-app-for-hrv-guided-training/25778)
+(by @Inigo_Tolosa and @MedTechCD) for HRV-guided training, you know the
+morning routine: open MATLAB Mobile, run the script, and it writes Rest, LIT,
+Planned or HIT into the `TrainingAdvice` wellness field. With
+`BRIDGE_IMREADY4_ENABLED=true` the bridge does that step itself, a few minutes
+after your watch's morning sync has brought last night's HRV and resting heart
+rate into Intervals: same inputs, same 30-day z-scores, same zones, same field,
+so your existing chart keeps working. It reads Intervals only, writes only an
+empty `TrainingAdvice` (never one you or the script set, never a locked day),
+and writes nothing when the night's values or enough history are missing.
+`garmin-intervals-bridge imready4` shows today's advice with its reasoning,
+compares past days with what the field already holds, and fills days that have
+none. It is off by default. On the reference account it agrees with ImReady4's
+own results on 97.6 % of 1,225 days; the details, the differences and how to
+set it up are in [docs/IMREADY4.md](docs/IMREADY4.md).
 
 ## Charts
 
@@ -392,6 +412,7 @@ file named by `BRIDGE_ENV_FILE`); variables already set always win.
 | `BRIDGE_WELLNESS_PROFILE` | `recommended` | `recommended` or `all` custom fields |
 | `BRIDGE_GARMIN_REQUEST_DELAY` | `0.5` | Seconds between Garmin requests (minimum 0.25) |
 | `BRIDGE_STALE_HOURS` | `24` | `health` alerts once a service has failed this long |
+| `BRIDGE_IMREADY4_ENABLED` | `false` | `true`: write ImReady4's training advice into `TrainingAdvice` each morning (see [docs/IMREADY4.md](docs/IMREADY4.md)) |
 
 ## Known limitations
 

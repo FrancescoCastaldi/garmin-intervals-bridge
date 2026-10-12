@@ -58,6 +58,10 @@ key*. Nothing else is needed; the athlete id is taken from the key.
 The folder `~/GarminBridge/data` will hold the Garmin session, the original
 FIT files and the daily archive. Keep it private, it is yours only.
 
+If you use ImReady4 for HRV-guided training, the bridge can write its daily
+advice for you: add the line `BRIDGE_IMREADY4_ENABLED=true` to the same file
+(see [IMREADY4.md](IMREADY4.md)).
+
 ## 4. Sign in to Garmin once
 
 ```bash

@@ -136,6 +136,16 @@ class IntervalsClient:
             raise ValueError("Intervals wellness API returned invalid response")
         return obj
 
+    def wellness_range(self, oldest: date, newest: date, cols: list[str] | None = None) -> list[dict]:
+        """Wellness records of a date range, oldest first; custom fields only when named in `cols`."""
+        params = {"oldest": oldest.isoformat(), "newest": newest.isoformat()}
+        if cols:
+            params["cols"] = ",".join(cols)
+        records = self._request("GET", "/wellness", params=params)
+        if not isinstance(records, list):
+            raise ValueError("Intervals wellness range response was not a list")
+        return records
+
     def write_wellness(self, day: date, changes: dict) -> Any:
         if not changes:
             return None

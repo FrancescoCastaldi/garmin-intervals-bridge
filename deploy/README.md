@@ -146,6 +146,23 @@ one mail a day through the same `OnFailure=` hook. The timer runs it once a day:
 systemctl enable --now garmin-intervals-bridge-health.timer
 ```
 
+## ImReady4 training advice (optional)
+
+To have the morning runs write ImReady4's training advice into the existing
+`TrainingAdvice` wellness field, add `BRIDGE_IMREADY4_ENABLED=true` to
+`/etc/garmin-intervals-bridge/env`; the next run of the watch timer picks it
+up, no new timer is needed. Before that, see what it would write today (as
+the service user, with the same environment as the units, like the backfills
+above):
+
+```bash
+garmin-intervals-bridge imready4                              # today, dry run
+garmin-intervals-bridge imready4 --from 2026-01-01 --compare  # against the advice already in the field
+```
+
+Afterwards the journal shows `ImReady4 advice for …` once each morning.
+Details: [docs/IMREADY4.md](../docs/IMREADY4.md).
+
 ## Notes
 
 - A `watch` without `--apply` still records the activities it saw; after

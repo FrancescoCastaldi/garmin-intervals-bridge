@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **ImReady4 training advice, without the morning MATLAB step** (optional, off
+  by default): with `BRIDGE_IMREADY4_ENABLED=true` the bridge calculates
+  ImReady4's advice (Rest / LIT / Planned / HIT) once last night's HRV and
+  resting HR are in Intervals and writes it into the existing
+  `TrainingAdvice` field – an independent implementation of the script's
+  scoring (4.43): 20·ln(rMSSD) and resting HR as z-scores against the last 30
+  days with the population SD, ImReady4's zones. Intervals requests only;
+  only an empty field is written, never a locked day, nothing without the
+  night's values or 14 measured days; read back and done once a day.
+  `imready4` previews a day, compares a range with the values already there
+  and fills days without advice (`--apply`, `--overwrite`). Agrees with the
+  script's reference results on 30 of 30 days and with 1,196 of 1,225 days on
+  the reference account. See `docs/IMREADY4.md`.
+
 ## 0.5.2 — 2026-10-12
 
 Gear picked in the app after the run, and the version in the log.

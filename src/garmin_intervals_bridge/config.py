@@ -29,6 +29,15 @@ def _timezone() -> tuple[ZoneInfo, str]:
                          "e.g. Europe/London") from exc
 
 
+def _flag(name: str) -> bool:
+    value = os.getenv(name, "").strip().lower()
+    if value in ("", "0", "false", "no", "off"):
+        return False
+    if value in ("1", "true", "yes", "on"):
+        return True
+    raise ValueError(f"{name} must be true or false")
+
+
 def _positive_int(name: str, default: int, max_value: int) -> int:
     value = int(os.getenv(name, str(default)))
     if not 1 <= value <= max_value:
@@ -75,6 +84,7 @@ class Settings:
     wellness_profile: str = "recommended"
     stale_hours: int = 24
     timezone_source: str = "BRIDGE_TIMEZONE"
+    imready4: bool = False
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -104,6 +114,7 @@ class Settings:
             wellness_profile=profile,
             stale_hours=_positive_int("BRIDGE_STALE_HOURS", 24, 24 * 30),
             timezone_source=tz_source,
+            imready4=_flag("BRIDGE_IMREADY4_ENABLED"),
         )
 
     def ensure_data_dir(self) -> None:

@@ -10,7 +10,7 @@ from contextlib import ExitStack
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from . import __version__
+from . import __version__, imready4
 from .charts import setup_charts
 from .config import Settings
 from .enrich import enrich_activity, gap_report, match_activity
@@ -149,6 +149,18 @@ def build_parser() -> argparse.ArgumentParser:
     gear.add_argument("--recalc", action="store_true",
                       help="Also recount the totals of every paired gear and its components with Intervals' own "
                            "count, when they drifted (e.g. after reassignments by hand)")
+    advice = sub.add_parser("imready4", help="ImReady4-compatible training advice from Intervals' HRV and resting "
+                                             "HR into the TrainingAdvice field: a day (default today), a range, a "
+                                             "comparison with values already there (dry run unless --apply)")
+    advice.add_argument("--date", help="YYYY-MM-DD (default: today)")
+    advice.add_argument("--from", dest="start", help="YYYY-MM-DD: a range instead of one day")
+    advice.add_argument("--to", dest="end", help="YYYY-MM-DD (default: today)")
+    advice.add_argument("--compare", action="store_true",
+                        help="Compare with the values TrainingAdvice already holds (e.g. from running ImReady4)")
+    advice.add_argument("--apply", action="store_true", help="Write days whose TrainingAdvice is empty")
+    advice.add_argument("--overwrite", action="store_true",
+                        help="Also replace values TrainingAdvice already holds (with --apply)")
+    advice.add_argument("--details", action="store_true", help="With --compare: list every day too")
     sub.add_parser("status", help="Show pending uploads requiring manual reconciliation")
     account = sub.add_parser("snapshot-account", help="Archive what is not a time series: profile, settings, "
                                                       "devices, zones, gear, personal records, badges, workouts, "
@@ -286,6 +298,7 @@ def main(argv: list[str] | None = None) -> int:
                        else ("health",) if args.cmd == "health"
                        # gear touches only the gear field: next to a running `run`, only not twice at once
                        else ("gear",) if args.cmd == "gear"
+                       else ("imready4",) if args.cmd == "imready4"
                        # read-only diagnosis must work next to a running `run`: no shared state written
                        else () if args.cmd in ("status", "snapshot-account", "gap")
                        else ("activities",))
@@ -334,6 +347,19 @@ def main(argv: list[str] | None = None) -> int:
                     intervals = IntervalsClient(settings.intervals_api_key, settings.intervals_athlete_id)
                     fields = intervals.provision_fields(apply=args.apply)
                     print(json.dumps({"apply": args.apply, "missing_codes": fields}, indent=2))
+                    return 0
+                if args.cmd == "imready4":
+                    intervals = IntervalsClient(settings.intervals_api_key, settings.intervals_athlete_id)
+                    today = datetime.now(settings.timezone).date()
+                    if args.date and args.start:
+                        raise ValueError("--date or --from, not both")
+                    start = date.fromisoformat(args.start or args.date or today.isoformat())
+                    end = date.fromisoformat(args.end) if args.end else (today if args.start else start)
+                    if start > end:
+                        raise ValueError("--from must not be after --to")
+                    out = imready4.run_days(intervals, start, end, apply=args.apply, overwrite=args.overwrite,
+                                            compare=args.compare, details=args.details, today=today)
+                    print(json.dumps(out, indent=2, ensure_ascii=False))
                     return 0
                 if args.cmd == "gear":
                     intervals = IntervalsClient(settings.intervals_api_key, settings.intervals_athlete_id)
