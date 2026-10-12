@@ -39,7 +39,12 @@ It asks, one question at a time:
    session renews itself for about a year.
 4. **Extras** – your Garmin gear (bikes, shoes) on the Intervals activities,
    charts for the Garmin values, ImReady4's training advice if you use it.
-5. **A trial run** that changes nothing and tells you what the bridge would
+5. **When the bridge needs you** – Garmin wants a new sign-in, or something
+   has been failing for a day: besides a note in your Intervals calendar, an
+   e-mail (sent from your own mailbox; Gmail and iCloud need an app password,
+   GMX and web.de "POP3/IMAP access" switched on) and/or a push message on
+   your phone (the free app *ntfy*, no account). Each gets a test message.
+6. **A trial run** that changes nothing and tells you what the bridge would
    do. Answer **y** to start it for real: it writes to Intervals from now on
    and starts by itself whenever you log in to Windows.
 

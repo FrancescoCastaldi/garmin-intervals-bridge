@@ -6,7 +6,8 @@
   - Garmin's login expired: everything stops until someone signs in again, and nobody
     reads a log file. One NOTE in the Intervals calendar on that day, once per episode,
     only by a bridge that may write (--apply); never deleted by the bridge.
-    BRIDGE_INTERVALS_NOTES=false turns it off.
+    BRIDGE_INTERVALS_NOTES=false turns it off. And an e-mail or push message, when
+    set up (alerts.py).
 """
 from __future__ import annotations
 
@@ -18,7 +19,7 @@ from typing import Any
 
 import requests
 
-from . import __version__
+from . import __version__, alerts
 
 log = logging.getLogger(__name__)
 
@@ -28,9 +29,10 @@ LOGIN_NOTE_KEY = "notice:garmin_login"
 SIGNED_IN = threading.Event()
 LOGIN_NOTE_NAME = "Garmin bridge: Garmin login needed"
 LOGIN_NOTE_TEXT = ("The garmin-intervals-bridge can no longer sign in to Garmin Connect: the saved session "
-                   "expired or was revoked. Nothing is synced until you sign in again: run "
-                   "'garmin-intervals-bridge login' (or 'garmin-intervals-bridge setup') on the computer the "
-                   "bridge runs on. The bridge does not delete this note; remove it whenever you like.")
+                   "expired or was revoked. Nothing is synced until you sign in again: on the bridge's web page "
+                   "('garmin-intervals-bridge ui', then Garmin) or with 'garmin-intervals-bridge login' on the "
+                   "computer the bridge runs on. The bridge does not delete this note; remove it whenever you "
+                   "like.")
 
 
 def _version(text: str) -> tuple[int, ...] | None:
@@ -65,7 +67,9 @@ def update_finding(settings: Any, *, in_container: bool, session: Any = None) ->
 
 
 def login_needed(settings: Any, store: Any, intervals: Any, today: date, *, apply: bool) -> bool:
-    """Put the note in the calendar unless this episode already has one; True when written."""
+    """Tell the owner once per episode: an e-mail / push message (when set up), and the note in
+    the calendar (a bridge that may write); True when the note was written."""
+    alerts.login_needed(settings, store)
     if not apply or not getattr(settings, "intervals_notes", False) or intervals is None:
         return False
     if store.get_meta(LOGIN_NOTE_KEY):
@@ -84,5 +88,6 @@ def login_needed(settings: Any, store: Any, intervals: Any, today: date, *, appl
 def garmin_ok(store: Any) -> None:
     """Garmin answered: the episode is over, the next expiry gets its own note."""
     store.set_meta("garmin_last_ok")
-    if store.get_meta(LOGIN_NOTE_KEY):
-        store.set_meta(LOGIN_NOTE_KEY, "")
+    for key in (LOGIN_NOTE_KEY, alerts.LOGIN_KEY):
+        if store.get_meta(key):
+            store.set_meta(key, "")

@@ -17,6 +17,8 @@ Findings that alert
   - activities failed twice or more, or uploads pending reconciliation
 
 Informational: what the last day did, a day boundary in UTC, a newer release (notices.py).
+Findings that alert also go out by e-mail / push message when set up, at most once a day
+(alerts.py).
 """
 from __future__ import annotations
 
@@ -28,7 +30,7 @@ import time
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from . import notices
+from . import alerts, notices
 from .autostart import platform
 from .mapping import map_wellness
 
@@ -65,6 +67,8 @@ def probe(settings: Any, garmin: Any, intervals: Any, store: Any, *, now: float 
                 store.set_meta(f"{name}_last_ok")
             entry.update(ok=True, last_ok_age_hours=0.0)
         except Exception as exc:                       # every failure counts here
+            if name == "garmin" and type(exc).__name__ == "GarminLoginNeeded":
+                notices.login_needed(settings, store, None, _today(settings), apply=False)
             last_ok = store.meta_updated(f"{name}_last_ok")
             age = (now - last_ok) if last_ok else None
             entry.update(ok=False, error=f"{type(exc).__name__}: {exc}"[:200],
@@ -88,6 +92,7 @@ def probe(settings: Any, garmin: Any, intervals: Any, store: Any, *, now: float 
         report["findings"].append(update)
     for f in report["findings"]:
         (log.error if f["alert"] else log.warning)("%s: %s", f["what"], f["detail"])
+    alerts.health(settings, store, report["findings"], _today(settings).isoformat())
     if any(f["alert"] for f in report["findings"]):
         report["exit"] = 2
     return report

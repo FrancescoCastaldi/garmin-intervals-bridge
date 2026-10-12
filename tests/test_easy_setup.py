@@ -345,11 +345,12 @@ def _wizard(script, monkeypatch, **kw):
         clients[key] = clients.get(key) or WizardIntervals(key)
         return clients[key]
     installed = []
+    notify = kw.pop("notify", lambda channel, values: "sent")
     trial = kw.pop("trial", lambda *a: {"activities": {"seen": 2, "planned": 1},
                                        "wellness": {"days_checked": 1, "days_with_changes": 1}})
     WizardGarmin.logins = []
     code = wizard.run(script, intervals_client=client, garmin_source=WizardGarmin,
-                      install=lambda env, **k: installed.append(env) or {"note": ""}, trial=trial)
+                      install=lambda env, **k: installed.append(env) or {"note": ""}, trial=trial, notify=notify)
     return code, installed, clients
 
 
@@ -362,6 +363,7 @@ def test_setup_from_nothing_to_running(_empty_home, tmp_path, monkeypatch):
                              "n",           # gear
                              "n",           # trend
                              "n",           # charts
+                             "n", "n",      # no e-mail, no push
                              "y"],          # start
                     secrets=["wrong-key", "good-key"])
     code, installed, clients = _wizard(script, monkeypatch)
@@ -391,6 +393,7 @@ def test_setup_again_keeps_the_answers_and_foreign_lines(_empty_home, tmp_path, 
     script = Script(answers=["",            # keep the key
                              "",            # Europe/Vienna right
                              "n", "n", "n",
+                             "n", "n",      # no e-mail, no push
                              "n"])          # do not start yet
     code, installed, clients = _wizard(script, monkeypatch)
     assert code == 0 and installed == []
@@ -404,7 +407,7 @@ def test_setup_again_keeps_the_answers_and_foreign_lines(_empty_home, tmp_path, 
 def test_setup_ignores_another_projects_dot_env(_empty_home, tmp_path, monkeypatch):
     (tmp_path / ".env").write_text("DATABASE_URL=postgres://x\n")
     monkeypatch.chdir(tmp_path)
-    script = Script(answers=[str(tmp_path / "bridge"), "", "n", "n", "n", "n"], secrets=["good-key"])
+    script = Script(answers=[str(tmp_path / "bridge"), "", "n", "n", "n", "n", "n", "n"], secrets=["good-key"])
     code, _, _ = _wizard(script, monkeypatch)
     assert code == 0 and (tmp_path / ".env").read_text() == "DATABASE_URL=postgres://x\n"
     assert config.parse_env_file(tmp_path / "bridge" / ".env")["INTERVALS_API_KEY"] == "good-key"
@@ -416,7 +419,7 @@ def test_setup_while_the_bridge_runs_skips_the_trial_and_restarts_it(_empty_home
     (folder / "data" / "tokens" / "ok").write_text("")
     (folder / ".env").write_text("INTERVALS_API_KEY=good-key\nBRIDGE_TIMEZONE=Europe/Vienna\n")
     monkeypatch.chdir(tmp_path)
-    script = Script(answers=["", "", "n", "n", "n", "y"])
+    script = Script(answers=["", "", "n", "n", "n", "n", "n", "y"])
     with single_instance((folder / "data").resolve(), ("activities",)):
         code, installed, _ = _wizard(script, monkeypatch, trial=lambda *a: pytest.fail("no trial next to it"))
     assert code == 0 and len(installed) == 1 and "(restarted)" in "\n".join(script.said)
@@ -424,7 +427,7 @@ def test_setup_while_the_bridge_runs_skips_the_trial_and_restarts_it(_empty_home
 
 def test_setup_creates_charts_and_trend_fields_only_after_the_last_yes(_empty_home, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    script = Script(answers=["", "", "n", "y", "y", "y"], secrets=["good-key"])
+    script = Script(answers=["", "", "n", "y", "y", "n", "n", "y"], secrets=["good-key"])
     code, _, clients = _wizard(script, monkeypatch)
     iv = clients["good-key"]
     assert code == 0 and iv.created_fields                       # trend fields and charts
@@ -457,13 +460,13 @@ def test_write_env_replaces_only_its_own_lines(tmp_path):
 def test_setup_turns_gear_on_for_new_activities_and_leaves_an_earlier_choice_alone(_empty_home, tmp_path, monkeypatch):
     from garmin_intervals_bridge.gear import load_config
     monkeypatch.chdir(tmp_path)
-    script = Script(answers=["", "", "y", "n", "n", "n", "y"], secrets=["good-key"])      # gear yes, retired no
+    script = Script(answers=["", "", "y", "n", "n", "n", "n", "n", "y"], secrets=["good-key"])  # gear yes, retired no
     code, _, _ = _wizard(script, monkeypatch)
     data = (_empty_home / "GarminBridge" / "data").resolve()
     st = Store(data)
     assert code == 0 and load_config(st)["create"] is True and load_config(st)["include_retired"] is False
     st.close()
-    script = Script(answers=["", "", "n", "n", "y"])                  # again: no gear question any more
+    script = Script(answers=["", "", "n", "n", "n", "n", "y"])        # again: no gear question any more
     code, _, _ = _wizard(script, monkeypatch)
     assert code == 0 and "Gear: set up earlier" in "\n".join(script.said)
 
@@ -495,3 +498,45 @@ def test_setup_names_commands_the_way_this_person_starts_the_bridge(_empty_home,
     assert wizard.command_name() == str(Path("~/GarminBridge/venv/bin/garmin-intervals-bridge"))
     monkeypatch.setattr(wizard.shutil, "which", lambda name: str(venv))
     assert wizard.command_name() == "garmin-intervals-bridge"
+
+
+def test_setup_sets_up_e_mail_and_push_alerts_after_a_test_message(_empty_home, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    sent = []
+
+    def notify(channel, values):
+        sent.append((channel, dict(values)))
+        return "the mailbox refused the user name or password" if len(sent) == 1 else "sent"
+    script = Script(answers=["", "", "n", "n", "n",
+                             "y", "ann@gmail.com",            # e-mail: Gmail, the server is known
+                             "y", "",                         # first password refused: try again, same address
+                             "y", "",                         # push: subscribed, Enter
+                             "n"],                            # do not start yet
+                    secrets=["good-key", "wrong", "abcd efgh ijkl mnop"])
+    code, _, _ = _wizard(script, monkeypatch, notify=notify)
+    assert code == 0
+    said = "\n".join(script.said)
+    assert "smtp.gmail.com" in said and "app password" in said and "Sending failed: the mailbox refused" in said
+    values = config.parse_env_file(_empty_home / "GarminBridge" / ".env")
+    assert values["BRIDGE_ALERT_EMAIL"] == "ann@gmail.com" and values["BRIDGE_SMTP_PASSWORD"] == "abcd efgh ijkl mnop"
+    assert "BRIDGE_SMTP_HOST" not in values                               # Gmail's server is built in
+    assert values["BRIDGE_NTFY_URL"].startswith("https://ntfy.sh/garmin-bridge-")
+    topic = values["BRIDGE_NTFY_URL"].rsplit("/", 1)[1]
+    assert topic in said and [c for c, _ in sent] == ["e-mail", "e-mail", "push"]
+    assert "abcd efgh" not in said                                        # the password is never shown
+
+    script = Script(answers=["", "", "n", "n", "n", "n", "y", "", "n"])   # again: e-mail off, push kept
+    code, _, _ = _wizard(script, monkeypatch, notify=lambda c, v: "sent")
+    values = config.parse_env_file(_empty_home / "GarminBridge" / ".env")
+    assert values["BRIDGE_ALERT_EMAIL"] == "" and values["BRIDGE_SMTP_PASSWORD"] == ""
+    assert values["BRIDGE_NTFY_URL"].endswith(topic)
+
+
+def test_setup_asks_for_the_server_of_an_unknown_provider(_empty_home, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    script = Script(answers=["", "", "n", "n", "n", "y", "me@example.org", "mail.example.org", "465", "",
+                             "n", "n"], secrets=["good-key", "pw"])
+    code, _, _ = _wizard(script, monkeypatch)
+    values = config.parse_env_file(_empty_home / "GarminBridge" / ".env")
+    assert code == 0 and values["BRIDGE_SMTP_HOST"] == "mail.example.org" and values["BRIDGE_SMTP_PORT"] == "465"
+    assert values["BRIDGE_SMTP_USER"] == "me@example.org"

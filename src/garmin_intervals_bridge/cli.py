@@ -11,7 +11,7 @@ from contextlib import ExitStack
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from . import __version__, autostart, hrvtrend, imready4, notices, webui, wizard
+from . import __version__, alerts, autostart, hrvtrend, imready4, notices, webui, wizard
 from .charts import setup_charts
 from .config import Settings, configured_log_file
 from .enrich import enrich_activity, gap_report, match_activity
@@ -63,6 +63,8 @@ def build_parser() -> argparse.ArgumentParser:
     page.add_argument("--host", default="127.0.0.1",
                       help="127.0.0.1 (default) = this computer only; anything else needs BRIDGE_UI_PASSWORD")
     page.add_argument("--no-browser", action="store_true", help="Only print the link")
+    sub.add_parser("notify-test", help="Send a test e-mail / push message to the alert channels set up "
+                                       "(BRIDGE_ALERT_EMAIL, BRIDGE_NTFY_URL)")
     sub.add_parser("login", help="Sign into Garmin once and save refreshable tokens (interactive)")
     probe = sub.add_parser("probe", help="Download and archive one untouched ORIGINAL FIT; no Intervals writes")
     probe.add_argument("--activity-id", help="Garmin Connect activity ID (default: latest)")
@@ -400,6 +402,15 @@ def main(argv: list[str] | None = None) -> int:
         settings.ensure_data_dir()
         if args.cmd == "ui":
             return webui.serve(host=args.host, port=args.port, open_browser=not args.no_browser)
+        if args.cmd == "notify-test":
+            result = alerts.test(settings)
+            if not result:
+                print("No alerts set up: BRIDGE_ALERT_EMAIL with BRIDGE_SMTP_PASSWORD, and/or BRIDGE_NTFY_URL "
+                      "(setup asks for them).")
+                return 1
+            for channel, outcome in result.items():
+                print(f"{channel}: {outcome}")
+            return 0 if all(v == "sent" for v in result.values()) else 1
         if args.cmd == "login":
             garmin = GarminSource(settings.token_dir, settings.garmin_request_delay)
             garmin.login(interactive=True)

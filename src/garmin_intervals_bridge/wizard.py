@@ -11,16 +11,18 @@ from __future__ import annotations
 
 import getpass
 import os
+import secrets
 import shutil
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Callable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 
-from . import __version__, autostart, hrvtrend, imready4
+from . import __version__, alerts, autostart, hrvtrend, imready4
 from .charts import setup_charts
 from .config import Settings, bridge_home, env_file, env_line_key, parse_env_file
 from .garmin import GarminBlocked, GarminLoginNeeded, GarminSource
@@ -34,7 +36,7 @@ from .store import InstanceBusy, Store, single_instance
 
 HEADER = ("# Garmin -> Intervals.icu Bridge settings, written by `garmin-intervals-bridge setup`.\n"
           "# Run setup again to change them, or edit this file (all settings: README, Configuration).\n")
-STEPS = 5
+STEPS = 6
 GUIDES = "https://github.com/futureweb/garmin-intervals-bridge/tree/main/docs"
 
 
@@ -236,6 +238,93 @@ def _extras(p: Prompt, saved: dict[str, str], intervals: Any, gear_config: dict 
     return out
 
 
+def send_test(channel: str, values: dict[str, str]) -> str:
+    """A test message through one channel with these (not yet saved) values: 'sent' or why not."""
+    target = SimpleNamespace(alert_email=values.get("BRIDGE_ALERT_EMAIL"), smtp_host=values.get("BRIDGE_SMTP_HOST"),
+                             smtp_port=values.get("BRIDGE_SMTP_PORT"), smtp_user=values.get("BRIDGE_SMTP_USER"),
+                             smtp_password=values.get("BRIDGE_SMTP_PASSWORD"), smtp_from=None,
+                             ntfy_url=values.get("BRIDGE_NTFY_URL"), ntfy_token=values.get("BRIDGE_NTFY_TOKEN"))
+    try:
+        if channel == "e-mail":
+            alerts.send_email(target, alerts.TEST_SUBJECT, alerts.TEST_TEXT)
+        else:
+            alerts.send_push(target, alerts.TEST_SUBJECT, alerts.TEST_TEXT)
+        return "sent"
+    except Exception as exc:
+        return alerts._why(exc)
+
+
+def _email(p: Prompt, saved: dict[str, str], notify: Callable[[str, dict], str]) -> dict[str, str]:
+    address = saved.get("BRIDGE_ALERT_EMAIL", "")
+    for _ in range(3):
+        address = p.ask("Your e-mail address", address).strip()       # a second try starts from the first
+        if "@" not in address:
+            p.say("That is not an e-mail address.")
+            continue
+        values = {"BRIDGE_ALERT_EMAIL": address}
+        server = alerts.provider(address)
+        if server is None:
+            host = p.ask("Your mailbox's outgoing mail server (SMTP), e.g. smtp.example.com",
+                         saved.get("BRIDGE_SMTP_HOST", "")).strip()
+            port = p.ask("Its port (587, or 465)", saved.get("BRIDGE_SMTP_PORT", "587")).strip()
+            user = p.ask("User name at the mail server", saved.get("BRIDGE_SMTP_USER", address)).strip()
+            if not host or not port.isdigit():
+                p.say("Without a server and port the bridge cannot send e-mail.")
+                continue
+            values.update({"BRIDGE_SMTP_HOST": host, "BRIDGE_SMTP_PORT": port, "BRIDGE_SMTP_USER": user})
+            server = (host, int(port))
+        p.say(f"The bridge sends from your own mailbox to yourself, through {server[0]}.")
+        if alerts.HINTS.get(server[0]):
+            p.say(alerts.HINTS[server[0]])
+        password = saved.get("BRIDGE_SMTP_PASSWORD", "")
+        if not (password and address == saved.get("BRIDGE_ALERT_EMAIL") and p.yes("Keep the saved password?")):
+            password = p.secret("Password for the bridge (not shown while you type or paste)")
+        values["BRIDGE_SMTP_PASSWORD"] = password
+        result = notify("e-mail", values)
+        if result == "sent":
+            p.say(f"Test e-mail sent to {address}: look in your inbox (and the spam folder).")
+            return values
+        p.say(f"Sending failed: {result}.")
+        if not p.yes("Try again?"):
+            break
+    p.say("No e-mail alerts; setup can add them later.")
+    return {"BRIDGE_ALERT_EMAIL": "", "BRIDGE_SMTP_PASSWORD": ""}
+
+
+def _push(p: Prompt, current: str, notify: Callable[[str, dict], str]) -> dict[str, str]:
+    url = current or f"https://ntfy.sh/garmin-bridge-{secrets.token_hex(8)}"
+    server, topic = url.rsplit("/", 1)
+    p.say("1. Install the free app 'ntfy' (App Store or Google Play); it needs no account.\n"
+          f"2. In the app tap +, and subscribe to the topic:  {topic}"
+          + ("" if server == "https://ntfy.sh" else f"  (server {server})") + "\n"
+          "   Whoever knows the topic name can read its messages: they only say that the bridge needs you.")
+    p.ask("Press Enter once you have subscribed")
+    result = notify("push", {"BRIDGE_NTFY_URL": url})
+    if result == "sent":
+        p.say("Test message sent: it should be on your phone now.")
+        return {"BRIDGE_NTFY_URL": url}
+    p.say(f"Sending failed: {result}.")
+    return {"BRIDGE_NTFY_URL": url} if p.yes("Keep the push messages anyway?", default=False) else \
+        {"BRIDGE_NTFY_URL": ""}
+
+
+def _alerts(p: Prompt, saved: dict[str, str], notify: Callable[[str, dict], str]) -> dict[str, str]:
+    p.say("When the bridge needs you - Garmin wants a new sign-in, or it has been failing for a day - it puts\n"
+          "a note in your Intervals calendar. It can also tell you by e-mail, or with a push message on your phone.")
+    values: dict[str, str] = {}
+    mail = saved.get("BRIDGE_ALERT_EMAIL", "")
+    if p.yes("By e-mail?" + (f" (now: {mail})" if mail else ""), default=bool(mail)):
+        values.update(_email(p, saved, notify))
+    elif mail:
+        values.update({"BRIDGE_ALERT_EMAIL": "", "BRIDGE_SMTP_PASSWORD": ""})
+    push = saved.get("BRIDGE_NTFY_URL", "")
+    if p.yes("As a push message on your phone (free ntfy app)?", default=bool(push)):
+        values.update(_push(p, push, notify))
+    elif push:
+        values["BRIDGE_NTFY_URL"] = ""
+    return values
+
+
 def _trial(settings: Settings, garmin: Any, intervals: Any, store: Store) -> dict:
     """What a first real run would do, writing nothing: two days of activities, last night."""
     from .sync import sync_enrich, sync_wellness
@@ -262,7 +351,7 @@ def _describe_trial(result: dict) -> list[str]:
 
 def run(prompt: Prompt | None = None, *, intervals_client: Callable[[str], Any] | None = None,
         garmin_source: Callable[..., Any] = GarminSource, install: Callable[..., Any] = autostart.install,
-        trial: Callable[..., dict] = _trial) -> int:
+        trial: Callable[..., dict] = _trial, notify: Callable[[str, dict], str] = send_test) -> int:
     p = prompt or Prompt()
     if autostart.platform() == "container":
         p.say("In a container the settings are the container's variables (INTERVALS_API_KEY, BRIDGE_TIMEZONE),\n"
@@ -274,14 +363,14 @@ def run(prompt: Prompt | None = None, *, intervals_client: Callable[[str], Any] 
     client = intervals_client or IntervalsClient
     p.say(f"Garmin -> Intervals.icu Bridge {__version__}: setup. Ctrl+C stops it at any point.\n")
     try:
-        return _run(p, client, garmin_source, install, trial)
+        return _run(p, client, garmin_source, install, trial, notify)
     except KeyboardInterrupt:
         p.say("\nSetup stopped. What was answered so far is saved; run setup again to go on.")
         return 1
 
 
 def _run(p: Prompt, client: Callable[[str], Any], garmin_source: Callable[..., Any],
-         install: Callable[..., Any], trial: Callable[..., dict]) -> int:
+         install: Callable[..., Any], trial: Callable[..., dict], notify: Callable[[str, dict], str]) -> int:
     path = _settings_file(p)
     saved = parse_env_file(path) if path.is_file() else {}
 
@@ -317,7 +406,12 @@ def _run(p: Prompt, client: Callable[[str], Any], garmin_source: Callable[..., A
         settings = save({"BRIDGE_IMREADY4_ENABLED": str(extras["imready4"]).lower(),
                          "BRIDGE_HRVTREND_ENABLED": str(extras["hrvtrend"]).lower()})
 
-        p.say(f"\n5/{STEPS} Trial run and start")
+        p.say(f"\n5/{STEPS} When the bridge needs you")
+        chosen = _alerts(p, saved, notify)
+        if chosen:
+            settings = save(chosen)
+
+        p.say(f"\n6/{STEPS} Trial run and start")
         running = False
         try:
             with single_instance(settings.data_dir, ("activities", "wellness")):

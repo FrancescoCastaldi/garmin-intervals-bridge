@@ -35,7 +35,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 
-from . import __version__, autostart, hrvtrend, imready4, notices
+from . import __version__, alerts, autostart, hrvtrend, imready4, notices
 from .charts import setup_charts
 from .config import Settings
 from .garmin import GarminBlocked, GarminSource
@@ -328,11 +328,12 @@ class UI:
         if settings.env_file is None:
             rows = [("Time zone", settings.timezone.key), ("ImReady4 advice", settings.imready4),
                     ("HRV trend advice", settings.hrvtrend), ("Update hint", settings.update_check),
-                    ("Calendar note when Garmin needs a sign-in", settings.intervals_notes)]
+                    ("Calendar note when Garmin needs a sign-in", settings.intervals_notes),
+                    ("Alerts", ", ".join(alerts.channels(settings)) or "none (BRIDGE_ALERT_EMAIL, BRIDGE_NTFY_URL)")]
             table = "".join(f"<tr><th>{esc(k)}</th><td>{esc(v)}</td></tr>" for k, v in rows)
             return self.page(session, "Settings", f'{message}<section><p>These come from the container\'s '
                              f'settings (its environment variables); change them there.</p><table>{table}</table>'
-                             '</section>')
+                             f'</section>{self._test_form(session, settings)}')
 
         def box(name: str, label: str, value: bool) -> str:
             return (f'<label><input type="checkbox" name="{name}" value="1"{" checked" if value else ""}> '
@@ -346,9 +347,41 @@ class UI:
                  + box("intervals_notes", "A note in my Intervals calendar when Garmin needs a new sign-in",
                        settings.intervals_notes)
                  + '<label>Replace the Intervals API key (leave empty to keep it) <input type="password" '
-                   'name="api_key" autocomplete="off"></label>')
+                   'name="api_key" autocomplete="off"></label>'
+                 + '<h2>When the bridge needs you</h2><p class="muted">Garmin wants a new sign-in, or the bridge '
+                   'has been failing for a day: besides the calendar note, an e-mail and/or a push message.</p>'
+                 + f'<label>E-mail address (empty = no e-mail) <input type="email" name="alert_email" '
+                   f'value="{esc(settings.alert_email)}"></label>'
+                 + '<label>Password to send with (for most providers an app password; empty = keep it) '
+                   '<input type="password" name="smtp_password" autocomplete="off"></label>'
+                 + f'<label>Mail server, only for a provider the bridge does not know (smtp.example.com) '
+                   f'<input type="text" name="smtp_host" value="{esc(settings.smtp_host)}"></label>'
+                 + f'<label>Its port <input type="text" name="smtp_port" value="{esc(settings.smtp_port or "")}" '
+                   f'inputmode="numeric"></label>'
+                 + box("push", "Push messages on my phone (free ntfy app: subscribe to the topic below)",
+                       bool(settings.ntfy_url))
+                 + f'<label>ntfy topic (empty = a new one) <input type="text" name="ntfy_url" '
+                   f'value="{esc(settings.ntfy_url)}"></label>')
+        hint = ""
+        server = alerts.smtp_server(settings)
+        if settings.alert_email and server and alerts.HINTS.get(server[0]):
+            hint = f'<p class="muted">{esc(alerts.HINTS[server[0]])}</p>'
         return self.page(session, "Settings", f'{message}<section>{self.form(session, "/settings", inner, "Save")}'
-                         f'<p class="muted">Saved in {esc(settings.env_file)}</p></section>')
+                         f'{hint}<p class="muted">Saved in {esc(settings.env_file)}</p></section>'
+                         f'{self._test_form(session, settings)}')
+
+    def _test_form(self, session: Session, settings: Settings) -> str:
+        if not alerts.channels(settings):
+            return ""
+        return ("<section>" + self.form(session, "/settings/test", "",
+                                        f"Send a test message ({', '.join(alerts.channels(settings))})",
+                                        light=True) + "</section>")
+
+    def alert_test(self, session: Session, query: dict, form: dict) -> str:
+        result = alerts.test(self.settings())
+        lines = "".join(f'<li class="{"ok" if v == "sent" else "bad"}">{esc(k)}: {esc(v)}</li>'
+                        for k, v in result.items()) or "<li>No alerts set up.</li>"
+        return self.settings_page(session, f"<section><h2>Test message</h2><ul>{lines}</ul></section>")
 
     def settings_post(self, session: Session, query: dict, form: dict) -> str:
         from .wizard import write_env
@@ -373,6 +406,22 @@ class UI:
                 return self.settings_page(session, '<p class="bad">Intervals did not accept this key; nothing '
                                                    'was changed.</p>')
             values["INTERVALS_API_KEY"] = key
+        email = form.get("alert_email", "").strip()
+        port = form.get("smtp_port", "").strip()
+        if (email and "@" not in email) or (port and not port.isdigit()):
+            return self.settings_page(session, '<p class="bad">That e-mail address or port does not look right; '
+                                               'nothing was changed.</p>')
+        values.update({"BRIDGE_ALERT_EMAIL": email, "BRIDGE_SMTP_HOST": form.get("smtp_host", "").strip(),
+                       "BRIDGE_SMTP_PORT": port})
+        if form.get("smtp_password"):
+            values["BRIDGE_SMTP_PASSWORD"] = form["smtp_password"]
+        if not email:
+            values["BRIDGE_SMTP_PASSWORD"] = ""
+        if form.get("push") == "1":
+            values["BRIDGE_NTFY_URL"] = (form.get("ntfy_url", "").strip() or settings.ntfy_url
+                                         or f"https://ntfy.sh/garmin-bridge-{secrets.token_hex(8)}")
+        else:
+            values["BRIDGE_NTFY_URL"] = ""
         write_env(settings.env_file, values)
         os.environ.update(values)
         restart = ""
@@ -524,6 +573,7 @@ class UI:
 
 GET_PAGES = {"/": "status", "/garmin": "garmin", "/settings": "settings", "/actions": "actions", "/log": "log_page"}
 POST_PAGES = {"/garmin": "garmin_post", "/garmin/mfa": "garmin_mfa", "/settings": "settings_post",
+              "/settings/test": "alert_test",
               "/restart": "restart_post", "/actions/gear": "gear_post", "/actions/gear-apply": "gear_apply",
               "/actions/charts": "charts_post", "/actions/advice": "advice_post"}
 

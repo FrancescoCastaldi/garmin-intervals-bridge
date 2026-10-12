@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -84,6 +84,10 @@ def _flag(name: str, default: bool = False) -> bool:
     raise ValueError(f"{name} must be true or false")
 
 
+def _text(name: str) -> str | None:
+    return os.getenv(name, "").strip() or None
+
+
 def _port(name: str) -> int | None:
     value = os.getenv(name, "").strip()
     if not value:
@@ -97,7 +101,8 @@ def _port(name: str) -> int | None:
 OPTIONS = {"intervals_api_key": "INTERVALS_API_KEY", "timezone": "BRIDGE_TIMEZONE",
            "imready4": "BRIDGE_IMREADY4_ENABLED", "hrvtrend": "BRIDGE_HRVTREND_ENABLED",
            "update_check": "BRIDGE_UPDATE_CHECK", "intervals_notes": "BRIDGE_INTERVALS_NOTES",
-           "ui_password": "BRIDGE_UI_PASSWORD"}
+           "ui_password": "BRIDGE_UI_PASSWORD", "alert_email": "BRIDGE_ALERT_EMAIL",
+           "smtp_password": "BRIDGE_SMTP_PASSWORD", "ntfy_url": "BRIDGE_NTFY_URL"}
 
 
 def load_options_file(path: Path | None = None) -> list[str]:
@@ -171,7 +176,7 @@ def parse_env_file(path: Path) -> dict[str, str]:
 class Settings:
     data_dir: Path
     token_dir: Path
-    intervals_api_key: str
+    intervals_api_key: str = field(repr=False)
     intervals_athlete_id: str
     timezone: ZoneInfo
     activity_days: int
@@ -189,6 +194,14 @@ class Settings:
     intervals_notes: bool = True
     ui_port: int | None = None
     ui_host: str = "127.0.0.1"
+    alert_email: str | None = None
+    smtp_host: str | None = None
+    smtp_port: int | None = None
+    smtp_user: str | None = None
+    smtp_password: str | None = field(default=None, repr=False)
+    smtp_from: str | None = None
+    ntfy_url: str | None = field(default=None, repr=False)        # the topic is the secret
+    ntfy_token: str | None = field(default=None, repr=False)
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -231,6 +244,14 @@ class Settings:
             ui_port=_port("BRIDGE_UI_PORT"),
             ui_host=os.getenv("BRIDGE_UI_HOST", "").strip() or (
                 "0.0.0.0" if os.getenv("BRIDGE_IN_CONTAINER") else "127.0.0.1"),
+            alert_email=_text("BRIDGE_ALERT_EMAIL"),
+            smtp_host=_text("BRIDGE_SMTP_HOST"),
+            smtp_port=_port("BRIDGE_SMTP_PORT"),
+            smtp_user=_text("BRIDGE_SMTP_USER"),
+            smtp_password=os.getenv("BRIDGE_SMTP_PASSWORD") or None,
+            smtp_from=_text("BRIDGE_SMTP_FROM"),
+            ntfy_url=_text("BRIDGE_NTFY_URL"),
+            ntfy_token=_text("BRIDGE_NTFY_TOKEN"),
         )
 
     def ensure_data_dir(self) -> None:

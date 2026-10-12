@@ -262,3 +262,25 @@ def test_a_web_sign_in_ends_the_wait_but_a_rate_limit_never_does(monkeypatch):
     notices.SIGNED_IN.set()
     assert cli.wait_after_block(GarminBlocked("429"), seconds=900) is False and slept == [900]
     notices.SIGNED_IN.clear()
+
+
+def test_alerts_are_set_on_the_settings_page_and_tested(page, env, monkeypatch):
+    tested = []
+    monkeypatch.setattr(webui.alerts, "test", lambda s: tested.append(s.alert_email) or {"e-mail": "sent",
+                                                                                       "push": "HTTP 502"})
+    cookie = signed_in(page)
+    token = csrf(call(page, "GET", "/settings", cookie=cookie)[2])
+    form = {"csrf": token, "timezone": "Europe/Vienna", "alert_email": "ann@gmail.com",
+            "smtp_password": "abcd efgh ijkl mnop", "push": "1"}
+    text = call(page, "POST", "/settings", form, cookie=cookie)[2]
+    assert "Saved" in text and "abcd efgh" not in text and "app password" in text          # Gmail's hint
+    values = config.parse_env_file(env)
+    assert values["BRIDGE_ALERT_EMAIL"] == "ann@gmail.com" and values["BRIDGE_SMTP_PASSWORD"] == "abcd efgh ijkl mnop"
+    topic = values["BRIDGE_NTFY_URL"]
+    assert topic.startswith("https://ntfy.sh/garmin-bridge-") and topic in text           # to subscribe to
+    text = call(page, "POST", "/settings/test", {"csrf": token}, cookie=cookie)[2]
+    assert tested == ["ann@gmail.com"] and "e-mail: sent" in text and "push: HTTP 502" in text
+    # saved again without a password: the password stays; push off clears the topic
+    call(page, "POST", "/settings", {**form, "smtp_password": "", "push": ""}, cookie=cookie)
+    values = config.parse_env_file(env)
+    assert values["BRIDGE_SMTP_PASSWORD"] == "abcd efgh ijkl mnop" and values["BRIDGE_NTFY_URL"] == ""

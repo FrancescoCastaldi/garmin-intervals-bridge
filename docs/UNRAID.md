@@ -30,8 +30,13 @@ daily archive – keep it private.
 - **Time zone** – yours, e.g. `Europe/Vienna`: it decides which date last
   night's sleep belongs to
 - **Web page password** – your own, 8 characters or more
-- optional, under *Show more settings*: ImReady4's training advice, the
-  experimental trend advice
+- optional: **Push messages** – install the free app *ntfy*, subscribe to a
+  topic name only you know and enter `https://ntfy.sh/<that name>`: the
+  bridge tells you when Garmin wants a new sign-in or something has been
+  failing for a day
+- optional, under *Show more settings*: the same by e-mail (address and the
+  password to send from it), ImReady4's training advice, the experimental
+  trend advice
 
 *Apply*. The container starts as a **dry run**: it shows what it would do
 without writing anything.

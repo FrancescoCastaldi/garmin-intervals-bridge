@@ -29,6 +29,10 @@ hand-made logon task / launch file.
 - When Garmin's session ends, a bridge running with `--apply` puts one note in the
   Intervals calendar ("Garmin bridge: Garmin login needed"), once per episode, never
   deleted by the bridge (`BRIDGE_INTERVALS_NOTES=false` turns it off).
+- Alerts by e-mail (through your own mailbox, servers of the common providers built in)
+  and/or push message (ntfy): when Garmin wants a new sign-in (once per episode) and
+  when the daily health check finds something that needs a person (at most once a day).
+  `setup` and the web page set them up with a test message; `notify-test`.
 - `ui` and `BRIDGE_UI_PORT`: the bridge's web page – status in plain words, Garmin
   sign-in with MFA (a waiting bridge goes on within a minute), settings, gear and chart
   plans with a confirm button, today's training advice, the log. Local with a random

@@ -152,6 +152,7 @@ run is exactly what `--apply` would send.
 | `setup` | Interactive setup: API key, time zone, Garmin sign-in, extras, a trial run, start at login. Again = change settings. |
 | `autostart [--status \| --remove \| --dry-run]` | Run `run --apply` in the background at every login (Windows Task Scheduler, macOS LaunchAgent, Linux systemd user service); again = restart. |
 | `ui [--port 8765] [--no-browser]` | The bridge's web page in your browser: status in plain words, Garmin sign-in with MFA, settings, gear and chart actions, the log. See [The web page](#the-web-page). |
+| `notify-test` | Send a test e-mail / push message to the alert channels that are set up. |
 | `login` | Interactive Garmin sign-in (email, password, MFA). Only session tokens are stored. |
 | `probe [--activity-id]` | Download and archive one original FIT. |
 | `gap --activity-id` | Original vs. the copy Intervals holds; lists everything only the original carries. |
@@ -443,6 +444,24 @@ NAS's HTTPS reverse proxy. Every form carries a per-session token, a page on 127
 answers only to its own host name, and nothing is written to Intervals or Garmin without
 a button that says so. Standard library only, no JavaScript.
 
+### When the bridge needs you
+
+Garmin's session can end (a password change, a revoked device); then nothing syncs until
+someone signs in again – and nobody reads a log file. So the bridge tells you: a note in
+your Intervals calendar (from a bridge running with `--apply`), and, when set up, an
+**e-mail** and/or a **push message** – once per episode, and once a day for anything the
+daily health check finds that needs a person.
+
+- E-mail goes out through your own mailbox (SMTP) to yourself: `BRIDGE_ALERT_EMAIL` and
+  `BRIDGE_SMTP_PASSWORD` – for Gmail, iCloud and Yahoo an app password; GMX and web.de
+  need "POP3/IMAP access" switched on. The server is known for the common providers;
+  any other one is `BRIDGE_SMTP_HOST` / `BRIDGE_SMTP_PORT` / `BRIDGE_SMTP_USER`.
+- Push messages go through [ntfy](https://ntfy.sh) (free app, no account):
+  `BRIDGE_NTFY_URL=https://ntfy.sh/<a long topic name only you know>`; they carry the
+  headline only.
+
+`setup` and the web page set both up and send a test message; `notify-test` does that too.
+
 ## Configuration
 
 Variables can also come from a settings file: the one named by `--env-file` or
@@ -470,6 +489,10 @@ win. Relative paths in a settings file count from its folder.
 | `BRIDGE_UI_PORT` | | `run` also serves the web page on this port (needs `BRIDGE_UI_PASSWORD`) |
 | `BRIDGE_UI_PASSWORD` | | Password for the web page next to `run`, or for `ui --host` other than 127.0.0.1; 8+ characters |
 | `BRIDGE_UI_HOST` | `127.0.0.1` (container: `0.0.0.0`) | Where the page next to `run` listens |
+| `BRIDGE_ALERT_EMAIL` | | Alerts by e-mail to this address, sent from its own mailbox (see [When the bridge needs you](#when-the-bridge-needs-you)) |
+| `BRIDGE_SMTP_PASSWORD` | | Password to send from that mailbox (often an app password) |
+| `BRIDGE_SMTP_HOST`, `_PORT`, `_USER`, `_FROM` | known for common providers; `587`; the address | Another mail server (465 = SSL, otherwise STARTTLS) |
+| `BRIDGE_NTFY_URL`, `BRIDGE_NTFY_TOKEN` | | Alerts as push messages (ntfy topic URL; a token for a protected server) |
 | `BRIDGE_OPTIONS_FILE` | `/data/options.json` | A Home Assistant add-on's options, read when there is no settings file (`intervals_api_key`, `timezone`, `imready4`, `hrvtrend`, `update_check`, `intervals_notes`, `ui_password`) |
 | `BRIDGE_INTERVALS_NOTES` | `true` | When Garmin's session ends and a new `login` is needed, a bridge running with `--apply` puts one note in your Intervals calendar (once per episode, never deleted by the bridge); `false` turns it off |
 

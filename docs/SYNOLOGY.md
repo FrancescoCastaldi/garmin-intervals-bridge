@@ -39,6 +39,9 @@ services:
       BRIDGE_UI_PORT: "8765"                     # the bridge's web page
       BRIDGE_UI_PASSWORD: "change-me-please"     # your own password for that page, 8+ characters
       # BRIDGE_IMREADY4_ENABLED: "true"          # ImReady4's training advice, see docs/IMREADY4.md
+      # BRIDGE_NTFY_URL: "https://ntfy.sh/a-long-name-only-you-know"   # push message when it needs you
+      # BRIDGE_ALERT_EMAIL: "you@gmail.com"      # e-mail when it needs you, with
+      # BRIDGE_SMTP_PASSWORD: "app password"     # the password to send from that mailbox
     ports:
       - "8765:8765"
     volumes:
@@ -76,6 +79,15 @@ also shows what the bridge is doing (*Status*), sets up gear and charts
 Without the web page (no `BRIDGE_UI_…` lines and no `ports`): *Container →
 garmin-intervals-bridge → Action → Open terminal* → *Create*, and type
 `garmin-intervals-bridge login`.
+
+**When the bridge needs you** – Garmin wants a new sign-in, or it has been
+failing for a day – it puts a note in your Intervals calendar. For a push
+message on your phone too, install the free app **ntfy**, subscribe to a
+topic name only you know, and remove the `#` in front of `BRIDGE_NTFY_URL`
+with that name at its end. For an e-mail, the two lines below it: your
+address and the password to send from that mailbox (Gmail, iCloud, Yahoo: an
+app password; GMX, web.de: allow POP3/IMAP access in the mailbox settings).
+The web page's *Settings* has a button that sends a test message.
 
 ## 4. See what it would do
 

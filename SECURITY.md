@@ -17,7 +17,8 @@ This project handles GPS tracks, detailed medical/fitness/health metrics (includ
 - Do not auto-resubmit a pending FIT upload without checking Intervals for the activity. Upload requests may have succeeded even after a network timeout.
 - `setup` reads the API key without echoing it and writes the settings file readable by its owner only (0600); keep `~/GarminBridge` (settings, log, data) private and out of cloud-synced folders you share.
 - The web page (`ui`, or `BRIDGE_UI_PORT` next to `run`): on 127.0.0.1 a random key in the link; anywhere else only with `BRIDGE_UI_PASSWORD` (8+ characters, the templates' placeholder refused). It is plain http – keep it in your home network or behind an HTTPS reverse proxy, never expose the port to the internet. Forms carry per-session CSRF tokens, local pages check the Host header (DNS rebinding), strict CSP, no caching or framing. The Garmin password typed there goes to Garmin only; the API key is never shown.
-- The bridge connects to Garmin Connect, Intervals.icu and, once a day for the update hint, pypi.org (`BRIDGE_UPDATE_CHECK=false` turns that off). No telemetry.
+- Alerts: the mailbox password (`BRIDGE_SMTP_PASSWORD`, ideally an app password that can only send) lives in the settings file like the API key; mail is sent with TLS. An ntfy topic name is a secret (anyone who knows it can read its messages): use a long random one, as `setup` does; push messages carry the headline only, never details.
+- The bridge connects to Garmin Connect, Intervals.icu and, once a day for the update hint, pypi.org (`BRIDGE_UPDATE_CHECK=false` turns that off); when alerts are set up, your mail server and/or the ntfy server. No telemetry.
 
 **Limitations**
 
