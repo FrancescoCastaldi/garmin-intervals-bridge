@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.5.2 — 2026-10-12
+
+Gear picked in the app after the run, and the version in the log.
 
 ### Changed
 
