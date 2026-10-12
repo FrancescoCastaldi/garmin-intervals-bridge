@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.7.1 — 2026-10-12
+
+New shoes in Garmin Connect reach Intervals by themselves.
+
+If you set up gear with `gear --create --apply` before this version, run it once more
+(`gear --create --include-retired --apply`): that is what lets the scheduled runs create
+new gear from now on.
 
 ### Changed
 
