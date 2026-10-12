@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.9.0 — 2026-10-12
+
+Swap mode: Garmin's filtered copy out, the original in – so Intervals holds the complete
+file and "Reprocess file" keeps everything. Off until you switch it on.
 
 ### Added
 
