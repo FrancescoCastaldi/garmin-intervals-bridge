@@ -13,7 +13,7 @@ from pathlib import Path
 
 from . import __version__, alerts, autostart, hrvtrend, imready4, notices, webui, wizard
 from .charts import setup_charts
-from .config import Settings, configured_log_file
+from .config import Settings, configured_log_file, within_hours
 from .enrich import enrich_activity, gap_report, intervals_id_from, match_activity, resolve_one
 from .fit import compare_fit, extract_original_fit, sha256
 from .garmin import DAY_ENDPOINTS, GarminBlocked, GarminLoginNeeded, GarminSource, parse_endpoints
@@ -118,9 +118,10 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--mode", choices=["enrich", "upload"], default="enrich",
                      help="enrich = official import stays on, the bridge adds what Garmin stripped (default); "
                           "upload = official import off, the bridge uploads every original as your own file")
-    run.add_argument("--poll-seconds", type=int, default=60,
+    run.add_argument("--poll-seconds", type=int,
                      help="Seconds between polls: Intervals in enrich mode (default 60), Garmin in upload mode "
-                          "(default 600, min 300)")
+                          "(default 600, min 300); also BRIDGE_POLL_SECONDS. BRIDGE_POLL_HOURS=10-18 polls only "
+                          "then (the full runs go on)")
     run.add_argument("--sync-minutes", type=int, default=30, help="Minutes between full runs (default 30)")
     run.add_argument("--iterations", type=int, help=argparse.SUPPRESS)      # tests
     backfill = sub.add_parser("backfill", help="Enrich a date range from the past, paced (dry run unless --apply)")
@@ -284,6 +285,8 @@ def run_loop(settings: Settings, store: Store, *, apply: bool, poll_seconds: int
                 log.info("Full run: %d activities seen, %d %s; wellness %d days checked, %d written; "
                          "%d Garmin requests", a["seen"], done, label, w["days_checked"], w["writes"], garmin.requests)
                 next_sync = now + sync_minutes * 60
+            elif not within_hours(datetime.now(settings.timezone), getattr(settings, "poll_hours", ())):
+                pass                                    # outside BRIDGE_POLL_HOURS: no poll; full runs go on
             elif mode == "upload":
                 garmin = GarminSource(settings.token_dir, settings.garmin_request_delay)
                 result = sync_activities(settings, garmin, intervals, store, apply=apply, allow_upload=True,
@@ -616,9 +619,8 @@ def main(argv: list[str] | None = None) -> int:
                                       "sha256": sha256(fit)}, indent=2))
                     return 0
                 if args.cmd == "run":
-                    poll = args.poll_seconds
-                    if args.mode == "upload" and poll == 60:
-                        poll = 600                            # a Garmin poll costs three requests, not one
+                    # a Garmin poll (upload mode) costs three requests, an Intervals poll one small one
+                    poll = args.poll_seconds or settings.poll_seconds or (600 if args.mode == "upload" else 60)
                     if poll < (300 if args.mode == "upload" else 30) or args.sync_minutes < 5:
                         raise ValueError("--poll-seconds too small for this mode, or --sync-minutes < 5")
                     if settings.ui_port:
@@ -628,6 +630,9 @@ def main(argv: list[str] | None = None) -> int:
                             log.error("No web page: %s", exc)
                     return run_loop(settings, store, apply=args.apply, poll_seconds=poll,
                                     sync_minutes=args.sync_minutes, iterations=args.iterations, mode=args.mode)
+                if args.cmd == "watch" and not within_hours(datetime.now(settings.timezone), settings.poll_hours):
+                    print(json.dumps({"apply": args.apply, "skipped": "outside BRIDGE_POLL_HOURS"}))
+                    return 0
                 if args.cmd == "watch":
                     intervals = IntervalsClient(settings.intervals_api_key, settings.intervals_athlete_id)
                     result: dict = {}

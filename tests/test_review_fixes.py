@@ -598,3 +598,44 @@ def test_upload_mode_puts_the_gear_on_the_uploaded_originals_too(tmp_path, monke
                  mode="upload")
     assert calls == ["upload", "gear", "upload", "gear"]               # full run, then a poll that uploaded
     st.close()
+
+
+def test_outside_the_poll_hours_only_the_full_runs_go_on(tmp_path, monkeypatch):
+    from garmin_intervals_bridge import cli
+    calls = []
+    monkeypatch.setattr(cli, "sync_enrich", lambda *a, **k: calls.append("sync") or {"seen": 0, "enriched": 0,
+                                                                                    "planned": 0})
+    monkeypatch.setattr(cli, "sync_wellness", lambda *a, **k: {"days_checked": 0, "writes": 0})
+    monkeypatch.setattr(cli, "watch_once", lambda *a, **k: calls.append("watch") or {"new": 0})
+    monkeypatch.setattr(cli, "wellness_check", lambda *a, **k: calls.append("check") or {})
+    monkeypatch.setattr(cli, "within_hours", lambda when, ranges: not ranges)      # a window that is closed now
+    monkeypatch.setattr(cli.time, "sleep", lambda s: None)
+    settings = _loop_settings(tmp_path)
+    settings.poll_hours = ((600, 1080),)
+    st = Store(tmp_path)
+    cli.run_loop(settings, st, apply=False, poll_seconds=60, sync_minutes=30, iterations=3)
+    assert calls == ["sync"]                                    # the full run, no polls
+    st.close()
+
+
+def test_watch_waits_outside_the_poll_hours(tmp_path, monkeypatch, capsys):
+    from garmin_intervals_bridge import cli
+    monkeypatch.setenv("BRIDGE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("INTERVALS_API_KEY", "not-a-real-key")
+    monkeypatch.setenv("BRIDGE_POLL_HOURS", "10-18")
+    monkeypatch.setattr(cli, "within_hours", lambda when, ranges: False)
+    monkeypatch.setattr(cli, "watch_once", lambda *a, **k: pytest.fail("no poll outside the window"))
+    assert main(["watch", "--apply"]) == 0 and "outside BRIDGE_POLL_HOURS" in capsys.readouterr().out
+
+
+def test_poll_seconds_from_the_settings(tmp_path, monkeypatch):
+    from garmin_intervals_bridge import cli
+    monkeypatch.setenv("BRIDGE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("INTERVALS_API_KEY", "not-a-real-key")
+    monkeypatch.setenv("BRIDGE_POLL_SECONDS", "300")
+    seen = {}
+    monkeypatch.setattr(cli, "run_loop", lambda settings, store, **k: seen.update(k) or 0)
+    assert main(["run"]) == 0 and seen["poll_seconds"] == 300
+    assert main(["run", "--poll-seconds", "120"]) == 0 and seen["poll_seconds"] == 120     # the option wins
+    monkeypatch.delenv("BRIDGE_POLL_SECONDS")
+    assert main(["run", "--mode", "upload"]) == 0 and seen["poll_seconds"] == 600

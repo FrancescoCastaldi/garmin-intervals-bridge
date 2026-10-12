@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `BRIDGE_POLL_SECONDS` and `BRIDGE_POLL_HOURS` (thanks @Michael.0000): poll less often,
+  or only in certain hours (`10-18`, `6-9,16-22`, `22-6`). Outside them `run` skips its
+  polls and `watch` does nothing; the half-hourly full runs go on, so activities and last
+  night's wellness still arrive.
+
 ## 0.9.0 — 2026-10-12
 
 Swap mode: Garmin's filtered copy out, the original in – so Intervals holds the complete

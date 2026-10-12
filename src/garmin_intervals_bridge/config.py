@@ -5,6 +5,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
@@ -82,6 +83,29 @@ def _flag(name: str, default: bool = False) -> bool:
     if value in ("1", "true", "yes", "on"):
         return True
     raise ValueError(f"{name} must be true or false")
+
+
+def poll_hours(text: str) -> tuple[tuple[int, int], ...]:
+    """'10-18', '6:30-9,17-22', '22-6' (over midnight) -> ranges in minutes after midnight."""
+    ranges = []
+    for part in [p.strip() for p in (text or "").split(",") if p.strip()]:
+        found = re.fullmatch(r"(\d{1,2})(?::(\d\d))?\s*-\s*(\d{1,2})(?::(\d\d))?", part)
+        if not found:
+            raise ValueError(f"BRIDGE_POLL_HOURS: '{part}' is no range like 10-18 or 6:30-9")
+        start = int(found.group(1)) * 60 + int(found.group(2) or 0)
+        end = int(found.group(3)) * 60 + int(found.group(4) or 0)
+        if start > 24 * 60 or end > 24 * 60 or start == end:
+            raise ValueError(f"BRIDGE_POLL_HOURS: '{part}' is no range of the day")
+        ranges.append((start, end))
+    return tuple(ranges)
+
+
+def within_hours(when: Any, ranges: tuple[tuple[int, int], ...]) -> bool:
+    """No ranges: always. Otherwise inside one of them (a range may run over midnight)."""
+    if not ranges:
+        return True
+    minute = when.hour * 60 + when.minute
+    return any(start <= minute < end if start < end else (minute >= start or minute < end) for start, end in ranges)
 
 
 def _text(name: str) -> str | None:
@@ -204,6 +228,8 @@ class Settings:
     ntfy_token: str | None = field(default=None, repr=False)
     swap: bool = False
     swap_hours: int = 48
+    poll_seconds: int | None = None
+    poll_hours: tuple = ()
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -254,6 +280,8 @@ class Settings:
             smtp_from=_text("BRIDGE_SMTP_FROM"),
             ntfy_url=_text("BRIDGE_NTFY_URL"),
             ntfy_token=_text("BRIDGE_NTFY_TOKEN"),
+            poll_seconds=_positive_int("BRIDGE_POLL_SECONDS", 60, 24 * 3600) if _text("BRIDGE_POLL_SECONDS") else None,
+            poll_hours=poll_hours(os.getenv("BRIDGE_POLL_HOURS", "")),
             swap=_flag("BRIDGE_SWAP"),
             swap_hours=_positive_int("BRIDGE_SWAP_HOURS", 48, 24 * 30),
         )

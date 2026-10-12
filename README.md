@@ -515,6 +515,8 @@ win. Relative paths in a settings file count from its folder.
 | `BRIDGE_SMTP_PASSWORD` | | Password to send from that mailbox (often an app password) |
 | `BRIDGE_SMTP_HOST`, `_PORT`, `_USER`, `_FROM` | known for common providers; `587`; the address | Another mail server (465 = SSL, otherwise STARTTLS) |
 | `BRIDGE_NTFY_URL`, `BRIDGE_NTFY_TOKEN` | | Alerts as push messages (ntfy topic URL; a token for a protected server) |
+| `BRIDGE_POLL_SECONDS` | `60` (upload mode `600`) | Seconds between the polls of `run` (`--poll-seconds` wins) |
+| `BRIDGE_POLL_HOURS` | always | Poll only in these hours, e.g. `10-18` or `6-9,16-22` (`22-6` runs over midnight). Outside them `run` skips its polls and `watch` does nothing; the half-hourly full runs go on, so an activity still arrives (within about two hours) and so does last night's wellness |
 | `BRIDGE_SWAP` | `false` | `true`: swap Garmin's filtered copy of each new activity for its original (upload, then delete the copy; see [Modes](#modes)) |
 | `BRIDGE_SWAP_HOURS` | `48` | Only copies imported this recently are swapped automatically |
 | `BRIDGE_OPTIONS_FILE` | `/data/options.json` | A Home Assistant add-on's options, read when there is no settings file (`intervals_api_key`, `timezone`, `imready4`, `hrvtrend`, `update_check`, `intervals_notes`, `ui_password`) |
