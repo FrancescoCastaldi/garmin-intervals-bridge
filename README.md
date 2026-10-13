@@ -245,9 +245,12 @@ garmin-intervals-bridge backfill --scope wellness --from 2025-01-01            #
 garmin-intervals-bridge backfill --scope wellness --from 2025-01-01 --pause 3 --apply
 ```
 
-A backfill uses the twelve per-day measurement endpoints by default
-(`--endpoints all` for every endpoint), pauses between days, and skips days
-already fetched, so it can be interrupted and resumed.
+A backfill reads fifteen endpoints per day by default: the per-day measurements plus
+endurance & hill score and race predictions (`--endpoints essential` for the twelve
+measurements only, `--endpoints all` for every endpoint). It pauses between days and
+skips days already fetched, so it can be interrupted and resumed. To add endpoints to
+days backfilled before, name them and force the re-read, e.g.
+`--endpoints endurance_score,hill_score,race_predictions --force-wellness`.
 
 ## Gear
 

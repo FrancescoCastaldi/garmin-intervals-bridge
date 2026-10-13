@@ -451,6 +451,9 @@ def test_endpoint_list_parsing():
     from garmin_intervals_bridge.garmin import ESSENTIAL_ENDPOINTS, parse_endpoints
     assert parse_endpoints("all") is None and parse_endpoints(None) is None
     assert parse_endpoints("essential") == ESSENTIAL_ENDPOINTS
+    standard = parse_endpoints("standard")                # the backfill's default: the scores people chart too
+    assert standard[:len(ESSENTIAL_ENDPOINTS)] == ESSENTIAL_ENDPOINTS
+    assert {"endurance_score", "hill_score", "race_predictions"} <= set(standard)
     assert parse_endpoints("heart_rates, floors") == ("heart_rates", "floors")
     with pytest.raises(ValueError):
         parse_endpoints("heart_rates,nope")

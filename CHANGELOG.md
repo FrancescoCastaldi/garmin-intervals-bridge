@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- A wellness backfill also reads endurance & hill score and race predictions by default
+  (15 instead of 12 requests per day; `--endpoints essential` for the old set). Thanks
+  @Jetty. For days backfilled before: `--endpoints endurance_score,hill_score,race_predictions
+  --force-wellness`.
+
 ## 0.9.1 — 2026-10-12
 
 Poll less, or only in certain hours.

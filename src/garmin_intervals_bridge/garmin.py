@@ -144,11 +144,13 @@ SET_ACTIVITY_TYPES = ("strength_training", "hiit", "indoor_cardio", "cardio_trai
 
 
 def parse_endpoints(text: str | None) -> tuple[str, ...] | None:
-    """`--endpoints`: "essential", "all" (None: every endpoint) or a comma-separated list of keys."""
+    """`--endpoints`: "standard", "essential", "all" (None: every endpoint) or a comma-separated list of keys."""
     if text is None or text == "all":
         return None
     if text == "essential":
         return ESSENTIAL_ENDPOINTS
+    if text == "standard":
+        return STANDARD_ENDPOINTS
     keys = tuple(k.strip() for k in text.split(",") if k.strip())
     unknown = [k for k in keys if k not in DAY_ENDPOINTS]
     if not keys or unknown:
@@ -162,6 +164,9 @@ def parse_endpoints(text: str | None) -> tuple[str, ...] | None:
 ESSENTIAL_ENDPOINTS = ("stats", "sleep", "hrv", "respiration", "spo2", "hydration",
                        "body_composition", "nutrition", "intensity_minutes", "stress",
                        "body_battery", "training_readiness")
+# What a backfill reads by default: the measurements, plus the scores and predictions people
+# chart (endurance and hill score, race predictions) – three more requests per day.
+STANDARD_ENDPOINTS = ESSENTIAL_ENDPOINTS + ("endurance_score", "hill_score", "race_predictions")
 
 
 class GarminSource:

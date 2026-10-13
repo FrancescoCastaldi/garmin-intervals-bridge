@@ -134,9 +134,11 @@ def build_parser() -> argparse.ArgumentParser:
     backfill.add_argument("--apply", action="store_true")
     backfill.add_argument("--pause", type=float, default=2.0, help="Seconds between days/activities (default 2)")
     backfill.add_argument("--force-wellness", action="store_true", help="Re-fetch days already fetched")
-    backfill.add_argument("--endpoints", default="essential",
-                          help="Wellness: 'essential' (per-day measurements, default), 'all', or a comma-separated "
-                               "list of endpoint keys (e.g. heart_rates,steps_intraday) to add to days fetched before")
+    backfill.add_argument("--endpoints", default="standard",
+                          help="Wellness: 'standard' (the per-day measurements plus endurance/hill score and "
+                               "race predictions, default), 'essential' (the measurements only), 'all', or a "
+                               "comma-separated list of endpoint keys (e.g. hill_score,race_predictions) to add to "
+                               "days fetched before (with --force-wellness)")
     backfill.add_argument("--wellness-files", action="store_true",
                           help="Wellness: mirror the device's original wellness files of each day (monitoring, sleep, "
                                "HRV, Health Snapshots ...) into wellness-files/; one Garmin request per day, no "

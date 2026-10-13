@@ -93,7 +93,8 @@ attached yet are asked for again on the next run during the activity's first
 two days. A finished day's wellness files are fetched with its final read,
 one request per day.
 
-Each wellness day costs about 25 Garmin requests (12 with `--endpoints essential`), each activity one original
+A backfilled wellness day costs 15 Garmin requests (12 with `--endpoints essential`, about 30 with
+`--endpoints all`), each activity one original
 download; the pause keeps a long backfill polite. Runs are resumable: days and
 activities already handled are skipped.
 
