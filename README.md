@@ -2,21 +2,24 @@
 
 # Garmin → Intervals.icu Bridge
 
-**Garmin started filtering the FIT files it sends to Intervals.icu. This puts the data back — and syncs a lot more.**
+**Garmin filters the FIT files it sends to Intervals.icu. This puts the data back — and syncs a lot more.**
 
-> **TL;DR** — Since late September 2026 Garmin strips its own metrics (Stamina, Recovery Time,
-> VO₂max, Performance Condition, Training Effect, Sweat Loss …) from the FIT files it sends to
-> Intervals.icu. This tool fetches the original file from Garmin Connect and adds the missing
-> data to the activity the official sync already created — no duplicates, nothing deleted,
-> training load untouched. It also syncs the daily wellness data the official sync misses
-> (night SpO₂, respiration, sleeping HR, Body Battery, HRV details, sleep stages, stress,
-> readiness, logged nutrition and total burn, endurance & hill scores, race predictions,
-> fitness age, Health Snapshots …), puts your Garmin gear (bikes, shoes, skis) on the activities,
-> can write ImReady4's daily training advice for you, backfills the past, and comes with 20
-> charts for all of it in Intervals' chart library. Runs on
-> Linux (systemd timers), in a container, or on **Windows or a Mac: install, answer a few
-> questions in `setup`, done** – it then runs in the background (guides for
-> [Windows](docs/WINDOWS.md), [Mac](docs/MAC.md), [Synology](docs/SYNOLOGY.md) and [Unraid](docs/UNRAID.md)).
+**Set up in five minutes:** [Windows](https://github.com/futureweb/garmin-intervals-bridge/blob/main/docs/WINDOWS.md) · [Mac](https://github.com/futureweb/garmin-intervals-bridge/blob/main/docs/MAC.md) · [Synology](https://github.com/futureweb/garmin-intervals-bridge/blob/main/docs/SYNOLOGY.md) · [Unraid](https://github.com/futureweb/garmin-intervals-bridge/blob/main/docs/UNRAID.md) · [Linux & Docker](https://github.com/futureweb/garmin-intervals-bridge#running-it)
+
+- **Your Garmin metrics back** on every activity — Stamina, Recovery Time, VO₂max, Performance
+  Condition, Training Effect, Sweat Loss … from the original file, nothing duplicated, training
+  load untouched.
+- **The wellness the official sync misses** — night SpO₂, respiration, HRV details, sleep
+  stages, Body Battery, stress, readiness, logged nutrition, endurance & hill scores, race
+  predictions … and the past, backfilled.
+- **And more** — your Garmin gear (bikes, shoes, skis) on the activities, ImReady4's daily
+  training advice, 20 ready-made charts, a web page, a note or push message when it needs
+  you. It runs quietly in the background on your own computer, NAS or server.
+
+> **Why:** since late September 2026 Garmin strips its own metrics from the FIT files it
+> hands to partners. The bridge fetches the original from Garmin Connect, with your own
+> login, and completes the activity the official sync created — or, in
+> [swap mode](https://github.com/futureweb/garmin-intervals-bridge#modes), replaces it with the original file.
 
 <p align="center">
 <img src="https://raw.githubusercontent.com/futureweb/garmin-intervals-bridge/main/docs/images/activity-fields.png" alt="Activity fields filled from the original FIT: training effect, VO2max, performance condition, recovery time, stamina, sweat loss" width="900"><br>
