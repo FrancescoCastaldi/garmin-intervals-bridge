@@ -59,7 +59,10 @@ def fit_segments(data: bytes) -> list[bytes]:
 
 def validate_fit(data: bytes) -> None:
     """Structural check followed by the SDK's CRC check of header and data, per segment."""
-    for segment in fit_segments(data):
+    segments = fit_segments(data)
+    if not segments:
+        raise InvalidFIT("Empty FIT data")
+    for segment in segments:
         decoder = Decoder(Stream.from_byte_array(bytearray(segment)))
         if not decoder.is_fit():
             raise InvalidFIT("Not a FIT file according to the SDK")
@@ -76,10 +79,13 @@ def extract_original_fit(download: bytes) -> bytes:
                 raise InvalidFIT(f"Expected exactly one FIT in archive, found {len(entries)}")
             # No extraction to disk: prevents zip-slip, oversized ZIP bombs, etc.
             entry = entries[0]
+            max_mb = MAX_FIT_BYTES // (1024 * 1024)
             if entry.file_size > MAX_FIT_BYTES:
-                raise InvalidFIT("Unexpectedly large FIT (>200MB)")
+                raise InvalidFIT(f"Unexpectedly large FIT (>{max_mb}MB)")
             with z.open(entry) as f:
                 data = f.read(MAX_FIT_BYTES + 1)
+            if len(data) > MAX_FIT_BYTES:
+                raise InvalidFIT(f"Unexpectedly large FIT (>{max_mb}MB)")
     else:
         data = download
     validate_fit(data)

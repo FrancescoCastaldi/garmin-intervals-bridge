@@ -117,3 +117,24 @@ def test_chained_fit_files_are_valid_and_decoded_together():
     assert len(messages["record"]) == 5
     with pytest.raises(InvalidFIT):
         validate_fit(one + b"garbage")            # trailing bytes that are not a FIT file
+
+
+def test_validate_fit_rejects_empty_data():
+    with pytest.raises(InvalidFIT, match="Empty FIT data"):
+        validate_fit(b"")
+
+
+def test_extract_original_fit_rejects_oversized_file(monkeypatch):
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("test.fit", minimal_fit())
+    data = buf.getvalue()
+    orig_zip = zipfile.ZipFile
+    class FakeZip(orig_zip):
+        def infolist(self):
+            entries = super().infolist()
+            entries[0].file_size = 35 * 1024 * 1024
+            return entries
+    monkeypatch.setattr(zipfile, "ZipFile", FakeZip)
+    with pytest.raises(InvalidFIT, match=r"Unexpectedly large FIT \(>32MB\)"):
+        extract_original_fit(data)
