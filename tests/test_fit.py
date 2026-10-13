@@ -117,3 +117,22 @@ def test_chained_fit_files_are_valid_and_decoded_together():
     assert len(messages["record"]) == 5
     with pytest.raises(InvalidFIT):
         validate_fit(one + b"garbage")            # trailing bytes that are not a FIT file
+
+
+def test_fit_segments_rejects_header_truncation():
+    from garmin_intervals_bridge.fit import fit_segments
+    # 13 bytes total: declares size 14, but only 13 bytes available
+    truncated_hdr = bytes([14, 0x10, 0x08, 0x00, 0, 0, 0, 0, ord('.'), ord('F'), ord('I'), ord('T'), 0])
+    with pytest.raises(InvalidFIT, match="FIT segment header truncated"):
+        fit_segments(truncated_hdr)
+
+
+def test_fit_segments_rejects_excessive_declared_size():
+    import struct
+
+    from garmin_intervals_bridge.fit import fit_segments
+    # Valid 14-byte header, but declared payload is 50MB
+    hdr = bytearray([14, 0x20, 0x00, 0x00]) + bytearray(struct.pack("<I", 50 * 1024 * 1024)) + bytearray(b".FIT\x00\x00")
+    with pytest.raises(InvalidFIT, match="exceeds maximum allowed size"):
+        fit_segments(bytes(hdr))
+

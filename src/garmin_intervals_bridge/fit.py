@@ -39,16 +39,20 @@ def fit_segments(data: bytes) -> list[bytes]:
     segments: list[bytes] = []
     pos = 0
     while pos < len(data):
-        if len(data) - pos < 14:
+        if len(data) - pos < 12:
             if pos:
                 raise InvalidFIT(f"FIT length mismatch: expected {pos}, got {len(data)}")   # trailing bytes
             raise InvalidFIT("File is shorter than FIT header/trailer")
         size = data[pos]
         if size not in (12, 14):
             raise InvalidFIT(f"Unexpected FIT header size {size}")
+        if len(data) - pos < size:
+            raise InvalidFIT(f"FIT segment header truncated: expected at least {size} bytes, got {len(data) - pos}")
         if data[pos + 8:pos + 12] != b".FIT":
             raise InvalidFIT("FIT magic header missing")
         declared = struct.unpack_from("<I", data, pos + 4)[0]
+        if declared > MAX_FIT_BYTES:
+            raise InvalidFIT(f"FIT segment size exceeds maximum allowed size ({declared} > {MAX_FIT_BYTES})")
         end = pos + size + declared + 2  # FIT CRC after data
         if end > len(data):
             raise InvalidFIT(f"FIT length mismatch: expected {end}, got {len(data)}")
