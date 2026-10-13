@@ -108,6 +108,17 @@ def within_hours(when: Any, ranges: tuple[tuple[int, int], ...]) -> bool:
     return any(start <= minute < end if start < end else (minute >= start or minute < end) for start, end in ranges)
 
 
+MODES = ("enrich", "upload", "backup")
+
+
+def _mode() -> str:
+    """BRIDGE_MODE: what `run` does without --mode – enrich (default), upload, or backup (Garmin only)."""
+    mode = os.getenv("BRIDGE_MODE", "").strip().lower() or "enrich"
+    if mode not in MODES:
+        raise ValueError(f"BRIDGE_MODE must be one of {', '.join(MODES)}")
+    return mode
+
+
 def _text(name: str) -> str | None:
     return os.getenv(name, "").strip() or None
 
@@ -230,6 +241,7 @@ class Settings:
     swap_hours: int = 48
     poll_seconds: int | None = None
     poll_hours: tuple = ()
+    mode: str = "enrich"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -282,6 +294,7 @@ class Settings:
             ntfy_token=_text("BRIDGE_NTFY_TOKEN"),
             poll_seconds=_positive_int("BRIDGE_POLL_SECONDS", 60, 24 * 3600) if _text("BRIDGE_POLL_SECONDS") else None,
             poll_hours=poll_hours(os.getenv("BRIDGE_POLL_HOURS", "")),
+            mode=_mode(),
             swap=_flag("BRIDGE_SWAP"),
             swap_hours=_positive_int("BRIDGE_SWAP_HOURS", 48, 24 * 30),
         )

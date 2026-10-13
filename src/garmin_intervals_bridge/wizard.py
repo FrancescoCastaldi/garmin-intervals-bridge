@@ -23,6 +23,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 
 from . import __version__, alerts, autostart, hrvtrend, imready4
+from .backup import backup_once
+from .backup import describe as describe_backup
 from .charts import setup_charts
 from .config import Settings, bridge_home, env_file, env_line_key, parse_env_file
 from .garmin import GarminBlocked, GarminLoginNeeded, GarminSource
@@ -314,9 +316,15 @@ def _push(p: Prompt, current: str, notify: Callable[[str, dict], str]) -> dict[s
         {"BRIDGE_NTFY_URL": ""}
 
 
-def _alerts(p: Prompt, saved: dict[str, str], notify: Callable[[str, dict], str]) -> dict[str, str]:
-    p.say("When the bridge needs you - Garmin wants a new sign-in, or it has been failing for a day - it puts\n"
-          "a note in your Intervals calendar. It can also tell you by e-mail, or with a push message on your phone.")
+def _alerts(p: Prompt, saved: dict[str, str], notify: Callable[[str, dict], str], *,
+            calendar: bool = True) -> dict[str, str]:
+    if calendar:
+        p.say("When the bridge needs you - Garmin wants a new sign-in, or it has been failing for a day - it puts\n"
+              "a note in your Intervals calendar. It can also tell you by e-mail, or with a push message on your "
+              "phone.")
+    else:
+        p.say("When the bridge needs you - Garmin wants a new sign-in, or it has been failing for a day - it can\n"
+              "tell you by e-mail, or with a push message on your phone.")
     values: dict[str, str] = {}
     mail = saved.get("BRIDGE_ALERT_EMAIL", "")
     if p.yes("By e-mail?" + (f" (now: {mail})" if mail else ""), default=bool(mail)):
@@ -357,7 +365,8 @@ def _describe_trial(result: dict) -> list[str]:
 
 def run(prompt: Prompt | None = None, *, intervals_client: Callable[[str], Any] | None = None,
         garmin_source: Callable[..., Any] = GarminSource, install: Callable[..., Any] = autostart.install,
-        trial: Callable[..., dict] = _trial, notify: Callable[[str, dict], str] = send_test) -> int:
+        trial: Callable[..., dict] = _trial, notify: Callable[[str, dict], str] = send_test,
+        backup: Callable[..., dict] = backup_once) -> int:
     p = prompt or Prompt()
     if autostart.platform() == "container":
         p.say("In a container the settings are the container's variables (INTERVALS_API_KEY, BRIDGE_TIMEZONE),\n"
@@ -369,14 +378,15 @@ def run(prompt: Prompt | None = None, *, intervals_client: Callable[[str], Any] 
     client = intervals_client or IntervalsClient
     p.say(f"Garmin -> Intervals.icu Bridge {__version__}: setup. Ctrl+C stops it at any point.\n")
     try:
-        return _run(p, client, garmin_source, install, trial, notify)
+        return _run(p, client, garmin_source, install, trial, notify, backup)
     except KeyboardInterrupt:
         p.say("\nSetup stopped. What was answered so far is saved; run setup again to go on.")
         return 1
 
 
 def _run(p: Prompt, client: Callable[[str], Any], garmin_source: Callable[..., Any],
-         install: Callable[..., Any], trial: Callable[..., dict], notify: Callable[[str, dict], str]) -> int:
+         install: Callable[..., Any], trial: Callable[..., dict], notify: Callable[[str, dict], str],
+         backup: Callable[..., dict]) -> int:
     path = _settings_file(p)
     saved = parse_env_file(path) if path.is_file() else {}
 
@@ -385,6 +395,14 @@ def _run(p: Prompt, client: Callable[[str], Any], garmin_source: Callable[..., A
         os.environ["BRIDGE_ENV_FILE"] = str(path)
         os.environ.update(values)                       # what this setup chose wins over earlier variables
         return Settings.from_env()
+
+    p.say("What should the bridge do?\n"
+          "  1  Bring your complete Garmin data into Intervals.icu (you use Intervals)\n"
+          "  2  Only back up your Garmin data to this computer - no Intervals needed")
+    choice = p.ask("1 or 2", "2" if saved.get("BRIDGE_MODE") == "backup" else "1").strip()
+    if choice == "2":
+        return _run_backup(p, path, saved, save, garmin_source, install, notify, backup)
+    mode = saved.get("BRIDGE_MODE") if saved.get("BRIDGE_MODE") in ("enrich", "upload") else "enrich"
 
     p.say(f"\n1/{STEPS} Intervals.icu")
     key = _intervals_key(p, saved.get("INTERVALS_API_KEY", ""), client)
@@ -395,7 +413,7 @@ def _run(p: Prompt, client: Callable[[str], Any], garmin_source: Callable[..., A
 
     p.say(f"\n2/{STEPS} Time zone")
     zone = _timezone(p, saved.get("BRIDGE_TIMEZONE", ""))
-    settings = save({"INTERVALS_API_KEY": api_key, "BRIDGE_TIMEZONE": zone,
+    settings = save({"INTERVALS_API_KEY": api_key, "BRIDGE_TIMEZONE": zone, "BRIDGE_MODE": mode,
                      "BRIDGE_LOG_FILE": saved.get("BRIDGE_LOG_FILE") or "bridge.log"})
     settings.ensure_data_dir()
     p.say(f"Saved in {path}")
@@ -450,6 +468,55 @@ def _run(p: Prompt, client: Callable[[str], Any], garmin_source: Callable[..., A
           f"  The past, gear of older activities, updating: the guide for your system, {GUIDES}")
     if steps.get("note"):
         p.say(f"  Note:      {steps['note']}")
+    return 0
+
+
+def _run_backup(p: Prompt, path: Path, saved: dict[str, str], save: Callable[[dict], Settings],
+                garmin_source: Callable[..., Any], install: Callable[..., Any], notify: Callable[[str, dict], str],
+                backup: Callable[..., dict]) -> int:
+    """Backup mode: no Intervals; the time zone, Garmin, alerts, a first backup, the start."""
+    steps = 4
+    p.say(f"\n1/{steps} Time zone")
+    zone = _timezone(p, saved.get("BRIDGE_TIMEZONE", ""))
+    settings = save({"BRIDGE_MODE": "backup", "BRIDGE_TIMEZONE": zone,
+                     "BRIDGE_LOG_FILE": saved.get("BRIDGE_LOG_FILE") or "bridge.log"})
+    settings.ensure_data_dir()
+    p.say(f"Saved in {path}")
+    p.say(f"\n2/{steps} Garmin Connect")
+    garmin = _garmin(p, settings, garmin_source)
+    if garmin is None:
+        return 1
+    p.say(f"\n3/{steps} When the bridge needs you")
+    chosen = _alerts(p, saved, notify, calendar=False)
+    if chosen:
+        settings = save(chosen)
+    p.say(f"\n4/{steps} First backup and start")
+    running = False
+    store = Store(settings.data_dir)
+    try:
+        with single_instance(settings.data_dir, ("activities", "wellness")):
+            p.say("Backing up the last days ...")
+            p.say(f"  {describe_backup(backup(settings, garmin, store))}")
+    except InstanceBusy:
+        running = True
+        p.say("The bridge already runs in the background; it restarts with these settings.")
+    finally:
+        store.close()
+    me = command_name()
+    if not p.yes("Keep backing up in the background, whenever you are logged in?"):
+        p.say(f"Start it later with: {me} autostart  (or in a window that stays open: {me} run)")
+        return 0
+    steps_done = install(settings.env_file or path, mode="backup")
+    p.say("\nDone. The backup runs in the background now" + (" (restarted)." if running else
+                                                               " and starts whenever you log in."))
+    p.say(f"  Your data: {settings.data_dir}  (what is where: {GUIDES}/BACKUP.md)\n"
+          f"  The past:  {me} backup --from 2020-01-01  (once; runs next to the background backup, takes a while)\n"
+          f"  Log:       {settings.log_file}\n"
+          f"  Settings:  {path}  (to change them: {me} setup)\n"
+          f"  Is it on:  {me} autostart --status\n"
+          f"  Stop it:   {me} autostart --remove")
+    if steps_done.get("note"):
+        p.say(f"  Note:      {steps_done['note']}")
     return 0
 
 

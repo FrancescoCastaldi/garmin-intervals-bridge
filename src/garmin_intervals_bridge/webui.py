@@ -243,6 +243,17 @@ class UI:
                 rows.append(("Last full run", f'{esc(_ago(syncs[-1]["started"], now))}: {a.get("seen", 0)} activities '
                              f'seen, {a.get("enriched", a.get("uploaded", 0))} completed; wellness '
                              f'{w.get("days_checked", 0)} days checked, {w.get("writes", 0)} written'))
+            backups = [r for r in runs if r["command"] == "backup"]
+            if backups:
+                total = {k: sum(r["metrics"].get(k) or 0 for r in backups if now - r["started"] < 86400)
+                         for k in ("activities", "wellness_days")}
+                rows.append(("Last backup", f'{esc(_ago(backups[-1]["started"], now))}; in the last 24 h '
+                             f'{total["activities"]} activities and {total["wellness_days"]} days of wellness '
+                             f'&middot; all in {esc(settings.data_dir)}'))
+            rows.append(("Mode", esc({"enrich": "complete Garmin's copies in Intervals",
+                                      "upload": "upload the originals to Intervals",
+                                      "backup": "back up Garmin to this computer (no Intervals)"}[settings.mode]
+                                     + (" + swap" if settings.swap and settings.mode == "enrich" else ""))))
             rows.append(("Day boundary", esc(settings.timezone.key)))
             on = [name for name, flag in (("ImReady4 advice", settings.imready4),
                                           ("HRV trend advice", settings.hrvtrend)) if flag]
@@ -453,6 +464,10 @@ class UI:
     # -- actions --
 
     def actions_page(self, session: Session, message: str = "") -> str:
+        if self.settings().mode == "backup":
+            return self.page(session, "Actions", f'{message}<section><p>Backup mode keeps your Garmin data in the '
+                             'data folder; the actions here are for Intervals.icu. The past: <code>backup --from '
+                             '2020-01-01</code> in a terminal.</p></section>')
         gear_form = self.form(session, "/actions/gear", (
             '<label><input type="checkbox" name="create" value="1" checked> Create Garmin gear that Intervals does '
             'not have yet</label><label><input type="checkbox" name="retired" value="1"> Retired gear too</label>'),

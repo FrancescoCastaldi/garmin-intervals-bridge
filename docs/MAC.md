@@ -32,7 +32,8 @@ it, then open a new Terminal window.
 venv/bin/garmin-intervals-bridge setup
 ```
 
-It asks, one question at a time:
+It asks, one question at a time (not on Intervals.icu? answer **2** to the first question for a
+[backup of your Garmin data](BACKUP.md) – no key needed):
 
 1. **Your Intervals.icu API key** – in Intervals.icu under *Settings →
    Developer Settings → API key*. Copy it and paste it into Terminal

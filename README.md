@@ -15,6 +15,8 @@
 - **And more** — your Garmin gear (bikes, shoes, skis) on the activities, ImReady4's daily
   training advice, 20 ready-made charts, a web page, a note or push message when it needs
   you. It runs quietly in the background on your own computer, NAS or server.
+- **Not on Intervals?** [Backup mode](https://github.com/futureweb/garmin-intervals-bridge/blob/main/docs/BACKUP.md) keeps all your Garmin data
+  – original activity files, every day's wellness, the watch's own files – in a folder of yours.
 
 > **Why:** since late September 2026 Garmin strips its own metrics from the FIT files it
 > hands to partners. The bridge fetches the original from Garmin Connect, with your own
@@ -155,6 +157,7 @@ run is exactly what `--apply` would send.
 | `setup` | Interactive setup: API key, time zone, Garmin sign-in, extras, a trial run, start at login. Again = change settings. |
 | `autostart [--status \| --remove \| --dry-run]` | Run `run --apply` in the background at every login (Windows Task Scheduler, macOS LaunchAgent, Linux systemd user service); again = restart. |
 | `ui [--port 8765] [--no-browser]` | The bridge's web page in your browser: status in plain words, Garmin sign-in with MFA, settings, gear and chart actions, the log. See [The web page](#the-web-page). |
+| `backup [--from DATE [--to DATE]] [--scope …]` | Back up Garmin into the data folder, no Intervals needed: without `--from` what backup mode does every hour, with `--from` the past. Runs next to a running bridge. |
 | `swap <id or link> [--apply]` | Replace Garmin's filtered copy of one activity by its original (see [Modes](#modes), *swap*). |
 | `notify-test` | Send a test e-mail / push message to the alert channels that are set up. |
 | `login` | Interactive Garmin sign-in (email, password, MFA). Only session tokens are stored. |
@@ -186,6 +189,13 @@ guarded by a persistent *pending* state so a timed-out upload is never
 replayed blindly, and blocked when an activity already exists nearby.
 Intervals de-duplicates uploads by file hash, so with the official import
 on this mode *would* create duplicates. Use it only with the import off.
+
+**backup** (`BRIDGE_MODE=backup`, or `run --mode backup`). Garmin only, no Intervals: every
+activity's original file with Garmin's summary and extras, each day's wellness (all
+endpoints, plus the watch's original wellness files) and weekly the account, into the
+data folder. Kind to Garmin – a day is read once it is final and once more three days
+later, about 60 requests a day. `backup --from DATE` fills in the past. See
+[docs/BACKUP.md](docs/BACKUP.md).
 
 **swap** (`BRIDGE_SWAP=true` on top of enrich, off by default). The official import
 stays on and is the trigger: within a minute of Garmin's filtered copy arriving, the
@@ -523,6 +533,7 @@ win. Relative paths in a settings file count from its folder.
 | `BRIDGE_SMTP_PASSWORD` | | Password to send from that mailbox (often an app password) |
 | `BRIDGE_SMTP_HOST`, `_PORT`, `_USER`, `_FROM` | known for common providers; `587`; the address | Another mail server (465 = SSL, otherwise STARTTLS) |
 | `BRIDGE_NTFY_URL`, `BRIDGE_NTFY_TOKEN` | | Alerts as push messages (ntfy topic URL; a token for a protected server) |
+| `BRIDGE_MODE` | `enrich` | What `run` does without `--mode`: `enrich`, `upload` or `backup` (Garmin only, no Intervals) |
 | `BRIDGE_POLL_SECONDS` | `60` (upload mode `600`) | Seconds between the polls of `run` (`--poll-seconds` wins) |
 | `BRIDGE_POLL_HOURS` | always | Poll only in these hours, e.g. `10-18` or `6-9,16-22` (`22-6` runs over midnight). Outside them `run` skips its polls and `watch` does nothing; the half-hourly full runs go on, so an activity still arrives (within about two hours) and so does last night's wellness |
 | `BRIDGE_SWAP` | `false` | `true`: swap Garmin's filtered copy of each new activity for its original (upload, then delete the copy; see [Modes](#modes)) |

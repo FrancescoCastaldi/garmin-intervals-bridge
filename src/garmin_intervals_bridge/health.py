@@ -55,9 +55,11 @@ def probe(settings: Any, garmin: Any, intervals: Any, store: Any, *, now: float 
     now = now or time.time()
     stale_after = settings.stale_hours * 3600
     report: dict[str, Any] = {"stale_hours": settings.stale_hours, "services": {}, "findings": [], "exit": 0}
-    for name, call in (("garmin", lambda: garmin.login(interactive=False)),
-                       ("intervals", lambda: intervals.activities(_today(settings) - timedelta(days=1),
-                                                                   _today(settings), fields=["id"], limit=1))):
+    checks = [("garmin", lambda: garmin.login(interactive=False))]
+    if intervals is not None:                          # backup mode has no Intervals to ask
+        checks.append(("intervals", lambda: intervals.activities(_today(settings) - timedelta(days=1),
+                                                                 _today(settings), fields=["id"], limit=1)))
+    for name, call in checks:
         entry: dict[str, Any] = {}
         try:
             call()
@@ -102,8 +104,11 @@ def silent_error_checks(settings: Any, store: Any, *, now: float | None = None) 
     now = now or time.time()
     findings: list[dict] = []
 
-    # 1) Are the timers alive at all?
-    for command, label in (("watch", "one-minute watch"), ("sync", "30-minute sync")):
+    # 1) Are the timers alive at all? (backup mode: its hourly run instead)
+    backup_mode = bool(store.recent_runs(24, "backup")) and not store.recent_runs(24, "sync")
+    expected = (("backup", "hourly backup"),) if backup_mode else (("watch", "one-minute watch"),
+                                                                   ("sync", "30-minute sync"))
+    for command, label in expected:
         runs = store.recent_runs(STALE_RUN_HOURS, command)
         if not runs and store.recent_runs(24 * 14, command):      # ran before, not any more
             findings.append({"alert": True, "what": f"{label} not running",
@@ -163,12 +168,20 @@ def silent_error_checks(settings: Any, store: Any, *, now: float | None = None) 
 
     # 4) Informational: what the last day of runs did (no alert)
     day_runs = store.recent_runs(24)
-    if day_runs:
-        enriched = sum((r["metrics"].get("enriched") or r["metrics"].get("activities", {}).get("enriched") or 0)
-                       for r in day_runs)
+    requests = sum(r["metrics"].get("garmin_requests") or 0 for r in day_runs)
+    if day_runs and backup_mode:
+        backups = [r["metrics"] for r in day_runs if r["command"] == "backup"]
+        findings.append({"alert": False, "what": "last 24 h",
+                         "detail": f"{len(backups)} backups: {sum(m.get('activities') or 0 for m in backups)} "
+                                   f"activities, {sum(m.get('wellness_days') or 0 for m in backups)} days of "
+                                   f"wellness, {requests} Garmin requests"})
+    elif day_runs:
+        def enriched_in(metrics: dict) -> int:
+            activities = metrics.get("activities")           # a dict in sync runs, a count in backups
+            return metrics.get("enriched") or (activities.get("enriched") if isinstance(activities, dict) else 0) or 0
+        enriched = sum(enriched_in(r["metrics"]) for r in day_runs)
         writes = sum((r["metrics"].get("wellness", {}) or {}).get("writes", 0)
                      + (r["metrics"].get("writes", 0) if r["command"] == "backfill" else 0) for r in day_runs)
-        requests = sum(r["metrics"].get("garmin_requests") or 0 for r in day_runs)
         findings.append({"alert": False, "what": "last 24 h",
                          "detail": f"{len(day_runs)} runs, {enriched} activities enriched, "
                                    f"{writes} wellness days written, {requests} Garmin requests"})

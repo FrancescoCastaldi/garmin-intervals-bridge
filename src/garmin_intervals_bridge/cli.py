@@ -12,6 +12,8 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from . import __version__, alerts, autostart, hrvtrend, imready4, notices, webui, wizard
+from .backup import backup_once, backup_range
+from .backup import describe as describe_backup
 from .charts import setup_charts
 from .config import Settings, configured_log_file, within_hours
 from .enrich import enrich_activity, gap_report, intervals_id_from, match_activity, resolve_one
@@ -57,7 +59,7 @@ def build_parser() -> argparse.ArgumentParser:
     what.add_argument("--remove", action="store_true", help="Stop it and remove the autostart")
     what.add_argument("--status", action="store_true", help="Show whether it is set up")
     what.add_argument("--dry-run", action="store_true", help="Show the files and commands, change nothing")
-    start.add_argument("--mode", choices=["enrich", "upload"], default="enrich", help="As for `run`")
+    start.add_argument("--mode", choices=["enrich", "upload", "backup"], help="As for `run` (default BRIDGE_MODE)")
     page = sub.add_parser("ui", help="Open the bridge's web page in your browser: status, Garmin sign-in (MFA), "
                                      "settings, gear and chart actions, the log. Until Ctrl+C")
     page.add_argument("--port", type=int, default=webui.DEFAULT_PORT)
@@ -115,15 +117,26 @@ def build_parser() -> argparse.ArgumentParser:
                                      "health probe once a day. For Windows and anything without systemd "
                                      "(dry run unless --apply)")
     run.add_argument("--apply", action="store_true")
-    run.add_argument("--mode", choices=["enrich", "upload"], default="enrich",
+    run.add_argument("--mode", choices=["enrich", "upload", "backup"],
                      help="enrich = official import stays on, the bridge adds what Garmin stripped (default); "
-                          "upload = official import off, the bridge uploads every original as your own file")
+                          "upload = official import off, the bridge uploads every original as your own file; "
+                          "backup = Garmin only, your data into the data folder, no Intervals (default: BRIDGE_MODE)")
     run.add_argument("--poll-seconds", type=int,
                      help="Seconds between polls: Intervals in enrich mode (default 60), Garmin in upload mode "
                           "(default 600, min 300); also BRIDGE_POLL_SECONDS. BRIDGE_POLL_HOURS=10-18 polls only "
                           "then (the full runs go on)")
-    run.add_argument("--sync-minutes", type=int, default=30, help="Minutes between full runs (default 30)")
+    run.add_argument("--sync-minutes", type=int, help="Minutes between full runs (default 30, backup mode 60)")
     run.add_argument("--iterations", type=int, help=argparse.SUPPRESS)      # tests
+    backup = sub.add_parser("backup", help="Back up your Garmin data into the data folder – no Intervals needed: "
+                                           "without --from what backup mode does every hour, with --from the past")
+    backup.add_argument("--from", dest="start", metavar="DATE", help="The past from DATE (YYYY-MM-DD)")
+    backup.add_argument("--to", dest="end", metavar="DATE", help="… up to DATE (default: yesterday)")
+    backup.add_argument("--scope", choices=["all", "activities", "wellness", "account"], default="all")
+    backup.add_argument("--endpoints", default="all",
+                        help="Wellness endpoints with --from: 'all' (default, about 30 requests per day), "
+                             "'standard' (15), 'essential' (12) or a list")
+    backup.add_argument("--pause", type=float, default=2.0, help="Seconds between days/activities (default 2)")
+    backup.add_argument("--force", action="store_true", help="With --from: read days already backed up again")
     backfill = sub.add_parser("backfill", help="Enrich a date range from the past, paced (dry run unless --apply)")
     backfill.add_argument("--scope", choices=["activities", "wellness"], required=True)
     backfill.add_argument("--mode", choices=["enrich", "upload"], default="enrich",
@@ -337,6 +350,46 @@ def run_loop(settings: Settings, store: Store, *, apply: bool, poll_seconds: int
     return 0
 
 
+def run_backup_loop(settings: Settings, store: Store, *, every_minutes: int, iterations: int | None = None) -> int:
+    """Backup mode: Garmin only, into the data folder; a health check once a day, no Intervals."""
+    log = logging.getLogger("bridge")
+    log.info("garmin-intervals-bridge %s running (backup mode): your Garmin data into %s every %d min",
+             __version__, settings.data_dir, every_minutes)
+    log.info("Day boundary: %s (%s)", settings.timezone.key, getattr(settings, "timezone_source", "BRIDGE_TIMEZONE"))
+    next_health, count = time.time() + 300, 0
+    while iterations is None or count < iterations:
+        count += 1
+        garmin = GarminSource(settings.token_dir, settings.garmin_request_delay)
+        try:
+            out = backup_once(settings, garmin, store)
+            out["garmin_requests"] = garmin.requests
+            store.record_run("backup", out)
+            if garmin.client is not None:
+                notices.garmin_ok(store)
+            if out["activities"] or out["wellness_days"] or out["account"]:
+                log.info("Backup: %s", describe_backup(out))
+            if time.time() >= next_health:
+                for finding in probe(settings, garmin, None, store).get("findings", []):
+                    (log.warning if finding.get("alert") else log.info)("Health: %s - %s", finding.get("what"),
+                                                                        finding.get("detail"))
+                next_health = time.time() + 86400
+        except KeyboardInterrupt:
+            log.info("Stopped")
+            return 0
+        except GarminBlocked as exc:
+            log.warning("%s; pausing for 15 minutes", exc)
+            if isinstance(exc, GarminLoginNeeded):
+                notices.login_needed(settings, store, None, datetime.now(settings.timezone).date(), apply=False)
+            if iterations is None:
+                wait_after_block(exc)
+            continue
+        except Exception as exc:
+            log.error("%s: %s", type(exc).__name__, exc)
+        if iterations is None or count < iterations:
+            time.sleep(every_minutes * 60)
+    return 0
+
+
 def wait_after_block(exc: GarminBlocked, seconds: float = 900) -> bool:
     """15 minutes of quiet after a block; True when a sign-in on the web page ended it early.
     A rate limit (429) always waits the full time."""
@@ -376,14 +429,14 @@ def _autostart(args: argparse.Namespace, settings: Settings) -> int:
             print(f"Log: {settings.log_file}")
         return 0 if state["installed"] else 1
     if args.dry_run:
-        steps = autostart.plan(settings.env_file, mode=args.mode)
+        steps = autostart.plan(settings.env_file, mode=args.mode or settings.mode)
         print(json.dumps({k: v for k, v in steps.items() if k != "encoding"}, indent=2))
         return 0
     if args.remove:
         autostart.remove(settings.env_file)
         print("Autostart removed; the bridge is stopped. Your settings and data stay where they are.")
         return 0
-    steps = autostart.install(settings.env_file, mode=args.mode)
+    steps = autostart.install(settings.env_file, mode=args.mode or settings.mode)
     print("The bridge now runs in the background and starts whenever you log in.")
     if settings.log_file:
         print(f"Log: {settings.log_file}")
@@ -445,7 +498,9 @@ def main(argv: list[str] | None = None) -> int:
             print("Garmin authenticated; session tokens saved locally.")
             return 0
         scope = getattr(args, "scope", None)
-        lock_scopes = (("activities", "wellness") if scope in (None, "all") and args.cmd in ("sync", "run", "watch")
+        lock_scopes = (("backup",) if args.cmd == "backup"         # the past, next to a running bridge
+                       else ("activities", "wellness") if scope in (None, "all")
+                       and args.cmd in ("sync", "run", "watch")
                        else ("wellness",) if scope == "wellness"
                        else ("health",) if args.cmd == "health"
                        # gear touches only the gear field: next to a running `run`, only not twice at once
@@ -621,17 +676,40 @@ def main(argv: list[str] | None = None) -> int:
                                       "sha256": sha256(fit)}, indent=2))
                     return 0
                 if args.cmd == "run":
+                    mode = args.mode or settings.mode
                     # a Garmin poll (upload mode) costs three requests, an Intervals poll one small one
-                    poll = args.poll_seconds or settings.poll_seconds or (600 if args.mode == "upload" else 60)
-                    if poll < (300 if args.mode == "upload" else 30) or args.sync_minutes < 5:
+                    poll = args.poll_seconds or settings.poll_seconds or (600 if mode == "upload" else 60)
+                    every = args.sync_minutes or (60 if mode == "backup" else 30)
+                    if poll < (300 if mode == "upload" else 30) or every < 5:
                         raise ValueError("--poll-seconds too small for this mode, or --sync-minutes < 5")
                     if settings.ui_port:
                         try:
                             webui.start_in_background(settings.ui_port, settings.ui_host)
                         except (ValueError, OSError) as exc:       # the bridge runs on without its page
                             log.error("No web page: %s", exc)
+                    if mode == "backup":
+                        return run_backup_loop(settings, store, every_minutes=every, iterations=args.iterations)
                     return run_loop(settings, store, apply=args.apply, poll_seconds=poll,
-                                    sync_minutes=args.sync_minutes, iterations=args.iterations, mode=args.mode)
+                                    sync_minutes=every, iterations=args.iterations, mode=mode)
+                if args.cmd == "backup":
+                    if args.start:
+                        start = date.fromisoformat(args.start)
+                        end = date.fromisoformat(args.end) if args.end else datetime.now(settings.timezone).date()
+                        if start > end:
+                            raise ValueError("--from must not be after --to")
+                        scopes = {"activities", "wellness", "account"} if args.scope == "all" else {args.scope}
+                        log.info("Backup %s..%s (%s), %.1fs pause; days already backed up are skipped", start, end,
+                                 ", ".join(sorted(scopes)), args.pause)
+                        out = backup_range(settings, garmin, store, start=start, end=end, scopes=scopes,
+                                           endpoints=parse_endpoints(args.endpoints), pause=args.pause,
+                                           force=args.force)
+                    else:
+                        out = backup_once(settings, garmin, store)
+                    out["garmin_requests"] = garmin.requests
+                    store.record_run("backup", out)
+                    log.info("Backup: %s", describe_backup(out))
+                    print(json.dumps(out, indent=2))
+                    return 0
                 if args.cmd == "watch" and not within_hours(datetime.now(settings.timezone), settings.poll_hours):
                     print(json.dumps({"apply": args.apply, "skipped": "outside BRIDGE_POLL_HOURS"}))
                     return 0
