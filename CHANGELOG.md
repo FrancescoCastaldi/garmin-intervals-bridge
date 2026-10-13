@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.10.3 — 2026-10-13
+
+The Home Assistant app's first real install, fixed.
 
 ### Fixed
 
