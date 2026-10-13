@@ -95,6 +95,22 @@ def test_push_carries_the_headline_and_an_optional_token():
         alerts.send_push(settings(ntfy_url="ntfy.sh/topic"), "S", "T", session=ntfy)
 
 
+def test_push_url_and_title_sanitization():
+    ntfy = Ntfy()
+    s = settings(ntfy_url="  https://ntfy.sh/padded-topic  \n", ntfy_token="  token-secret  ")
+    alerts.send_push(s, "Headline line 1\nHeadline line 2\r\nline 3", "Body text", session=ntfy)
+    url, text, headers = ntfy.posts[0]
+    assert url == "https://ntfy.sh/padded-topic" and text == "Body text"
+    assert headers["Title"] == "Headline line 1 Headline line 2 line 3"
+    assert headers["Authorization"] == "Bearer token-secret"
+
+
+def test_channels_ignores_empty_or_whitespace_ntfy_url():
+    assert "push" not in alerts.channels(settings(ntfy_url=""))
+    assert "push" not in alerts.channels(settings(ntfy_url="   "))
+
+
+
 def test_send_reports_per_channel_and_never_raises():
     s = settings(alert_email="ann@gmail.com", smtp_password="wrong", ntfy_url="https://ntfy.sh/t")
     result = alerts.send(s, "S", "T", session=Ntfy(status=500))

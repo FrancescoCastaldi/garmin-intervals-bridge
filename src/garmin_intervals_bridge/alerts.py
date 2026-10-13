@@ -78,7 +78,8 @@ def channels(settings: Any) -> list[str]:
     out = []
     if getattr(settings, "alert_email", None) and getattr(settings, "smtp_password", None) and smtp_server(settings):
         out.append("e-mail")
-    if getattr(settings, "ntfy_url", None):
+    ntfy_url = getattr(settings, "ntfy_url", None)
+    if ntfy_url and str(ntfy_url).strip():
         out.append("push")
     return out
 
@@ -109,12 +110,15 @@ def send_email(settings: Any, subject: str, text: str, *, smtp: Any = None) -> N
 
 
 def send_push(settings: Any, subject: str, text: str, *, session: Any = None) -> None:
-    url = settings.ntfy_url
-    if not str(url).startswith(("https://", "http://")):
+    raw_url = getattr(settings, "ntfy_url", None)
+    url = str(raw_url).strip() if raw_url is not None else ""
+    if not url.startswith(("https://", "http://")):
         raise ValueError("BRIDGE_NTFY_URL must be a web address, e.g. https://ntfy.sh/<topic>")
-    headers = {"Title": subject.encode("ascii", "replace").decode(), "Tags": "warning"}
-    if getattr(settings, "ntfy_token", None):
-        headers["Authorization"] = f"Bearer {settings.ntfy_token}"
+    clean_title = " ".join(subject.encode("ascii", "replace").decode().splitlines()).strip()
+    headers = {"Title": clean_title, "Tags": "warning"}
+    token = getattr(settings, "ntfy_token", None)
+    if token and str(token).strip():
+        headers["Authorization"] = f"Bearer {str(token).strip()}"
     response = (session or requests).post(url, data=text.encode("utf-8"), headers=headers, timeout=15)
     response.raise_for_status()
 
