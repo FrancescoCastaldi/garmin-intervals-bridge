@@ -1,35 +1,45 @@
-> **Superseded 2026-10-08.** This file documents the v0.1.1 preview. The audited
-> state, the revised architecture (enrich existing activities instead of uploading
-> duplicates) and the current phases are in [PLAN.md](PLAN.md).
-
 # Roadmap
 
-## v0.1 developer preview (this archive)
-- [x] Original FIT exporter, local archive and optional FIT comparison
-- [x] Garmin wellness snapshot collector (source JSON archival)
-- [x] Core and extended numeric Intervals wellness mapping
-- [x] Custom-field creation (private and idempotent)
-- [x] Default dry-run, no-duplicate / pending-upload protections, locked-day handling
-- [x] Docker, basic docs, synthetic offline unit tests
-- [ ] **Live original-FIT vs Garmin Connect web download comparison**
-- [ ] **Live Intervals FIT upload 201/200 response verification**
-- [ ] **Live custom-field creation + wellness round-trip**
-- [ ] Live one-week test of OAuth refresh, source error patterns and Garmin private API rate limits
+Where the bridge stands and where it goes. Ideas and reports:
+[forum thread](https://forum.intervals.icu/t/132863) or
+[issues](https://github.com/futureweb/garmin-intervals-bridge/issues). What changed when:
+[CHANGELOG.md](../CHANGELOG.md).
 
-## v0.2 after live account validation
-- [ ] Verify every Garmin JSON shape and unit; add captured redacted fixtures
-- [ ] Better Garmin multiple-device training status selection (do not conflate Garmin acute/chronic metrics with Intervals ATL/CTL)
-- [ ] Normalize historic body-composition, lactate-threshold, blood-pressure histories with timestamps
-- [ ] Add admin-only reconciliation workflow for pending FIT uploads
-- [ ] Add time-window backfill without excessive private API requests
-- [ ] Document Intervals 200 duplicate response and metadata restoration behavior
-- [ ] API error taxonomy, controlled retry for GET, metrics for cron alerts
-- [ ] Consider structured local time-series export (optional InfluxDB/Grafana), keep Intervals scalars separate
-- [ ] Optional OAuth-based Intervals auth for shared multi-user/public releases
-- [ ] Add offline contract tests from sanitized live data, never from raw private exports
-- [ ] Rename fields in UI as needed without changing stable `content.code`
+## There
 
-## Not planned without API support
-- Auto-replacing old Garmin-filtered Intervals activities or deleting any activity.
-- Synthesizing full FIT files from Grafana time-series. Garmin device FITs are kept untouched.
-- Mapping arbitrarily structured Garmin JSON or intraday streams to Intervals single daily scalar slots.
+- **Activities:** Garmin's filtered copy completed from the original FIT (*enrich*), replaced
+  by the original (*swap*), or the originals uploaded with the official import off
+  (*upload*); one activity again after Intervals' *Reprocess file*.
+- **Wellness:** the values the official integration misses, read once the watch has synced;
+  the device's own wellness files and Health Snapshots; backfills of the past.
+- **More:** gear from Garmin onto the activities, ImReady4's training advice and an
+  experimental HRV-trend advice, 20 charts, a complete local archive – or *backup* mode
+  without Intervals at all.
+- **Running it:** `setup` and autostart on Windows, Mac and Linux; containers for Synology,
+  Unraid and Docker; a Home Assistant app; systemd units; a web page with the Garmin sign-in;
+  alerts by calendar note, e-mail or push message.
+
+## Next
+
+- **Home Assistant app:** feedback from real installs, then the polish it asks for.
+- **Umbrel and CasaOS:** entries in their app stores, once the Home Assistant app has settled.
+- **History in backup mode** from the web page, not only from a terminal.
+
+## Waiting for Intervals.icu
+
+Asked for in the [feature request](https://forum.intervals.icu/t/api-upload-a-file-onto-an-existing-activity-and-a-new-activity-webhook-for-api-key-users/132953):
+
+- **Upload a file onto an existing activity** – the original into the activity Garmin's import
+  created: no new id, nothing to delete, swap mode without its catch.
+- **Being told about a new activity** (a webhook per API key, or an event stream) instead of
+  asking every minute.
+
+## Deliberately not
+
+- **A hosted service.** Garmin sign-ins collected in one place would be a target and a
+  liability; the bridge runs where your data is.
+- **A signed stand-alone program.** It would cost certificates every year; `py -m` keeps
+  Windows' Smart App Control content for free.
+- **Garmin data the device did not record.** Nothing is estimated or made up; what Garmin
+  does not deliver stays empty.
+- **Deleting anything on Garmin Connect.** The bridge only ever reads from Garmin.

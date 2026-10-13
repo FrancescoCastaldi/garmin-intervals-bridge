@@ -73,9 +73,9 @@ from Docker Hub or as a Claude Desktop bundle; [more below](#use-it-with-an-ai-c
 | **Rule** | Only what the partner copy lacks; aligned by timestamp; idempotent | Only empty values; locked days skipped; today's running totals wait until tomorrow |
 | **Archive** | Original + partner copy of every activity, Garmin's summary, weather, gear, splits | Raw JSON of every endpoint and the watch's original wellness files (Health Snapshots included), every day |
 
-Version 0.10.1. Verified end to end on one account (fenix 8, Edge 1040);
-the first live writes and the evidence are recorded in
-[docs/PLAN.md](docs/PLAN.md).
+Version 0.10.1. Verified end to end on one account (fenix 8, Edge 1040); what changed
+when is in the [CHANGELOG](CHANGELOG.md), where it goes next in the
+[roadmap](docs/ROADMAP.md).
 
 ## How it works
 
@@ -173,7 +173,10 @@ run is exactly what `--apply` would send.
 | `gear [--prefer intervals\|evidence\|garmin] [--map G=I] [--create] [--apply]` | Put Garmin's gear (bikes, shoes, skis …) on the Intervals activities, from the archive; see [Gear](#gear). |
 | `imready4 [--date D \| --from D [--to D]] [--compare] [--apply] [--overwrite]` | ImReady4-compatible training advice into `TrainingAdvice`: preview, comparison with existing values, filling the past; see [Training advice](#training-advice-imready4). |
 | `hrvtrend [--date D \| --from D [--to D]] [--compare] [--apply] [--overwrite]` | Experimental trend advice into its own field `HRVTrendAdvice`, compared with ImReady4's; see [docs/HRV_TREND.md](docs/HRV_TREND.md). |
+| `run [--apply] [--mode …] [--poll-seconds N] [--sync-minutes N]` | Keep running in one process: a poll every minute, a full run every 30 minutes, the daily health check (what autostart, the containers and the Home Assistant app start). See [Running it](#running-it). |
 | `status` | Pending uploads and failed activities with their retry time. |
+| `reset-pending --activity-id <garmin id>` | Upload mode: clear a pending upload after you checked Intervals by hand. |
+| `snapshot-account [--history-from DATE]` | Archive what is not a time series: profile, settings, devices, zones, gear, records, badges, workouts, plans, the calendar. |
 | `health` | Daily digest: probes both services and reports errors that would otherwise stay silent (dead timers, endpoints failing for days, fields Garmin stopped delivering, activities failing repeatedly). Exit 2 only when a human is needed. |
 
 ## Modes
@@ -543,8 +546,12 @@ win. Relative paths in a settings file count from its folder.
 | `BRIDGE_POLL_HOURS` | always | Poll only in these hours, e.g. `10-18` or `6-9,16-22` (`22-6` runs over midnight). Outside them `run` skips its polls and `watch` does nothing; the half-hourly full runs go on, so an activity still arrives (within about two hours) and so does last night's wellness |
 | `BRIDGE_SWAP` | `false` | `true`: swap Garmin's filtered copy of each new activity for its original (upload, then delete the copy; see [Modes](#modes)) |
 | `BRIDGE_SWAP_HOURS` | `48` | Only copies imported this recently are swapped automatically |
-| `BRIDGE_OPTIONS_FILE` | `/data/options.json` | A Home Assistant add-on's options, read when there is no settings file (`intervals_api_key`, `timezone`, `imready4`, `hrvtrend`, `update_check`, `intervals_notes`, `ui_password`) |
+| `BRIDGE_OPTIONS_FILE` | `/data/options.json` | A Home Assistant app's form, read when there is no settings file (its keys: `home-assistant/config.yaml`) |
 | `BRIDGE_INTERVALS_NOTES` | `true` | When Garmin's session ends and a new `login` is needed, a bridge running with `--apply` puts one note in your Intervals calendar (once per episode, never deleted by the bridge); `false` turns it off |
+
+Two more are set by the images themselves: `BRIDGE_IN_CONTAINER` (the container image: no
+autostart, web page on all interfaces) and `BRIDGE_UI_INGRESS` (the Home Assistant app:
+the page answers only Home Assistant's ingress).
 
 ## Known limitations
 

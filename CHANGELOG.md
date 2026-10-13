@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- The container image's default command is `run` (the bridge keeps running, a dry run until
+  the command says `--apply`) instead of a one-time dry `sync`. Every template set `run`
+  already.
+
+### Documentation
+
+- A current [roadmap](docs/ROADMAP.md); the rules contributions keep are in CONTRIBUTING.md
+  (the planning notes of the first day, `docs/PLAN.md`, are retired to the git history).
+- The README lists every command, `run`, `reset-pending` and `snapshot-account` included.
+
 ## 0.10.1 — 2026-10-13
 
 The bridge as a Home Assistant app.
@@ -513,7 +527,7 @@ first-class answer and completes the local mirror.
 ## 0.2.0 — 2026-10-08
 
 First version used in anger. Everything below was verified against a live
-Garmin and Intervals.icu account; see `docs/PLAN.md` for the evidence.
+Garmin and Intervals.icu account; see `docs/PLAN.md` (in the git history) for the evidence.
 
 ### Changed
 

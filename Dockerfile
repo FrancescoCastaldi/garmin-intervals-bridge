@@ -9,4 +9,5 @@ ENV BRIDGE_DATA_DIR=/data GARMIN_TOKEN_DIR=/data/tokens BRIDGE_IN_CONTAINER=1
 # the web page, when BRIDGE_UI_PORT=8765 and BRIDGE_UI_PASSWORD are set
 EXPOSE 8765
 ENTRYPOINT ["garmin-intervals-bridge"]
-CMD ["sync"]
+# `run`: polls, full runs, the daily health check – a dry run until the command says --apply
+CMD ["run"]
