@@ -115,6 +115,13 @@ pip install garmin-intervals-bridge          # Windows: py -m pip install garmin
 garmin-intervals-bridge setup                # Windows: py -m garmin_intervals_bridge setup
 ```
 
+On Linux (and with Homebrew's Python on a Mac) pip refuses to install into the system's
+Python – never use `--break-system-packages`; give the bridge its own environment instead:
+`pipx install garmin-intervals-bridge`, or `python3 -m venv ~/GarminBridge/venv`, then
+`~/GarminBridge/venv/bin/pip install garmin-intervals-bridge` and
+`~/GarminBridge/venv/bin/garmin-intervals-bridge setup` (Debian/Ubuntu: `apt install
+python3-venv` first). The autostart uses that environment.
+
 `setup` asks for the Intervals API key (checked on the spot), confirms the time
 zone, signs in to Garmin (MFA supported), offers gear, charts and the training
 advice, shows a trial run that writes nothing and, on your yes, starts the bridge
