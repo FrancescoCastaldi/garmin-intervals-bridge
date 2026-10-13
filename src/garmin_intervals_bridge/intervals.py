@@ -1,10 +1,11 @@
 """Small, explicit Intervals.icu REST client based on published API schema."""
 from __future__ import annotations
 
+import email.utils
 import logging
 import re
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -21,10 +22,36 @@ RETRY_AFTER_CAP_SECONDS = 30
 WRITE_RETRIES = 3                  # a wellness PUT answered with 429 is sent again after the wait
 
 
-def _retry_after(response: Any, attempt: int) -> float:
+def _parse_retry_after(raw: Any) -> float | None:
+    """Parse a Retry-After header value as delay-seconds or HTTP-date (RFC 7231)."""
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if not text:
+        return None
     try:
-        value = float(response.headers.get("Retry-After"))
-    except (AttributeError, TypeError, ValueError):
+        return max(0.0, float(text))
+    except (TypeError, ValueError):
+        pass
+    try:
+        dt = email.utils.parsedate_to_datetime(text)
+        if dt is not None:
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            delta = (dt - datetime.now(timezone.utc)).total_seconds()
+            return max(0.0, delta)
+    except (TypeError, ValueError, OverflowError):
+        pass
+    return None
+
+
+def _retry_after(response: Any, attempt: int) -> float:
+    raw = getattr(response, "headers", None)
+    header_val = raw.get("Retry-After") if (raw is not None and hasattr(raw, "get")) else None
+    parsed = _parse_retry_after(header_val)
+    if parsed is not None:
+        value = parsed
+    else:
         value = 5.0 * 2 ** attempt
     return max(1.0, min(value, RETRY_AFTER_CAP_SECONDS))
 
@@ -37,10 +64,10 @@ def rate_limited(exc: BaseException) -> float | None:
     response = getattr(exc, "response", None)
     if getattr(response, "status_code", None) != 429:
         return None
-    try:
-        return max(0.0, float(response.headers.get("Retry-After")))
-    except (AttributeError, TypeError, ValueError):
-        return 0.0
+    raw = getattr(response, "headers", None)
+    header_val = raw.get("Retry-After") if (raw is not None and hasattr(raw, "get")) else None
+    parsed = _parse_retry_after(header_val)
+    return parsed if parsed is not None else 0.0
 
 
 class _CappedRetry(Retry):

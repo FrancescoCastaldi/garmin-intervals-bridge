@@ -138,3 +138,42 @@ def test_a_wellness_write_answered_with_429_waits_and_is_sent_again(monkeypatch)
     assert client.write_wellness(date(2026, 10, 8), {"HRVTrendAdvice": 3}) == {"id": "2026-10-08"}
     assert waits == [2.0] and [c[0] for c in session.calls] == ["PUT", "PUT"]
     assert session.calls[0][2]["json"] == session.calls[1][2]["json"] == {"HRVTrendAdvice": 3}
+
+
+def test_retry_after_http_date_parsing(monkeypatch):
+    import email.utils
+    from datetime import datetime, timedelta, timezone
+
+    from garmin_intervals_bridge import intervals as module
+
+    target_dt = datetime.now(timezone.utc) + timedelta(seconds=15)
+    http_date = email.utils.format_datetime(target_dt)
+
+    resp = module.requests.Response()
+    resp.status_code = 429
+    resp.headers = {"Retry-After": http_date}
+
+    err = requests.HTTPError("429 Too Many Requests", response=resp)
+    seconds = module.rate_limited(err)
+    assert 13.0 <= seconds <= 17.0
+
+    calculated = module._retry_after(resp, attempt=0)
+    assert 13.0 <= calculated <= 17.0
+
+
+def test_parse_retry_after_edge_cases():
+    import email.utils
+    from datetime import datetime, timedelta, timezone
+
+    from garmin_intervals_bridge.intervals import _parse_retry_after
+
+    assert _parse_retry_after(None) is None
+    assert _parse_retry_after("") is None
+    assert _parse_retry_after("invalid-text") is None
+    assert _parse_retry_after("5") == 5.0
+    assert _parse_retry_after("12.5") == 12.5
+
+    past_dt = datetime.now(timezone.utc) - timedelta(seconds=10)
+    past_date = email.utils.format_datetime(past_dt)
+    assert _parse_retry_after(past_date) == 0.0
+
