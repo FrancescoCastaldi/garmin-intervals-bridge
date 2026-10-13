@@ -123,3 +123,29 @@ def test_health_in_backup_mode(tmp_path):
     summary = next(f for f in report["findings"] if f["what"] == "last 24 h")
     assert "1 activities, 2 days of wellness, 40 Garmin requests" in summary["detail"]
     st.close()
+
+
+def test_backup_runs_every_twelve_hours_or_as_set(tmp_path, monkeypatch):
+    monkeypatch.setenv("BRIDGE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("BRIDGE_MODE", "backup")
+    seen = []
+    monkeypatch.setattr(cli, "run_backup_loop", lambda settings, store, every_minutes, iterations: seen.append(
+        every_minutes) or 0)
+    assert cli.main(["run"]) == 0
+    monkeypatch.setenv("BRIDGE_BACKUP_HOURS", "24")
+    assert cli.main(["run"]) == 0 and cli.main(["run", "--sync-minutes", "90"]) == 0
+    assert seen == [720, 1440, 90]
+
+
+def test_a_backup_counts_as_stopped_only_after_two_missed_runs(tmp_path):
+    from garmin_intervals_bridge.health import silent_error_checks
+    st = Store(tmp_path)
+    st.record_run("backup", backup.new_metrics())
+    st.db.execute("UPDATE runs SET started = started - 20 * 3600")
+    st.db.commit()
+    s = SimpleNamespace(data_dir=tmp_path, timezone=VIENNA, backup_hours=12, wellness_profile="recommended")
+    assert not [f for f in silent_error_checks(s, st) if f["alert"]]             # 20 h: within 2 × 12 h + 1
+    st.db.execute("UPDATE runs SET started = started - 10 * 3600")
+    st.db.commit()
+    assert [f["what"] for f in silent_error_checks(s, st) if f["alert"]] == ["backup not running"]
+    st.close()

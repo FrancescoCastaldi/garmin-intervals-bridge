@@ -35,9 +35,11 @@ files are plain text.
 
 ## When, kindly to Garmin
 
-- **New activities**: every hour – one list request, then one download per new activity.
-- **Wellness**: a day once it is final, at noon of the next day, and once more three days
-  later for a watch that synced late – about 60 requests per day.
+A run every 12 hours (`BRIDGE_BACKUP_HOURS`, e.g. `24` for once a day):
+
+- **New activities**: one list request, then one download per new activity.
+- **Wellness**: a day once it is final – at the first run after noon of the next day – and
+  once more three days later for a watch that synced late; about 60 requests per day.
 - **The account**: once a week.
 
 ## The past

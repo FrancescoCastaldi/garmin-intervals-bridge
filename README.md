@@ -157,7 +157,7 @@ run is exactly what `--apply` would send.
 | `setup` | Interactive setup: API key, time zone, Garmin sign-in, extras, a trial run, start at login. Again = change settings. |
 | `autostart [--status \| --remove \| --dry-run]` | Run `run --apply` in the background at every login (Windows Task Scheduler, macOS LaunchAgent, Linux systemd user service); again = restart. |
 | `ui [--port 8765] [--no-browser]` | The bridge's web page in your browser: status in plain words, Garmin sign-in with MFA, settings, gear and chart actions, the log. See [The web page](#the-web-page). |
-| `backup [--from DATE [--to DATE]] [--scope …]` | Back up Garmin into the data folder, no Intervals needed: without `--from` what backup mode does every hour, with `--from` the past. Runs next to a running bridge. |
+| `backup [--from DATE [--to DATE]] [--scope …]` | Back up Garmin into the data folder, no Intervals needed: without `--from` what backup mode does every `BRIDGE_BACKUP_HOURS`, with `--from` the past. Runs next to a running bridge. |
 | `swap <id or link> [--apply]` | Replace Garmin's filtered copy of one activity by its original (see [Modes](#modes), *swap*). |
 | `notify-test` | Send a test e-mail / push message to the alert channels that are set up. |
 | `login` | Interactive Garmin sign-in (email, password, MFA). Only session tokens are stored. |
@@ -533,6 +533,7 @@ win. Relative paths in a settings file count from its folder.
 | `BRIDGE_SMTP_PASSWORD` | | Password to send from that mailbox (often an app password) |
 | `BRIDGE_SMTP_HOST`, `_PORT`, `_USER`, `_FROM` | known for common providers; `587`; the address | Another mail server (465 = SSL, otherwise STARTTLS) |
 | `BRIDGE_NTFY_URL`, `BRIDGE_NTFY_TOKEN` | | Alerts as push messages (ntfy topic URL; a token for a protected server) |
+| `BRIDGE_BACKUP_HOURS` | `12` | Backup mode: hours between runs (1–168); a day's wellness is taken once it is final either way |
 | `BRIDGE_MODE` | `enrich` | What `run` does without `--mode`: `enrich`, `upload` or `backup` (Garmin only, no Intervals) |
 | `BRIDGE_POLL_SECONDS` | `60` (upload mode `600`) | Seconds between the polls of `run` (`--poll-seconds` wins) |
 | `BRIDGE_POLL_HOURS` | always | Poll only in these hours, e.g. `10-18` or `6-9,16-22` (`22-6` runs over midnight). Outside them `run` skips its polls and `watch` does nothing; the half-hourly full runs go on, so an activity still arrives (within about two hours) and so does last night's wellness |

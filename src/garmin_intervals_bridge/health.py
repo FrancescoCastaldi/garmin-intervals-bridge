@@ -104,15 +104,17 @@ def silent_error_checks(settings: Any, store: Any, *, now: float | None = None) 
     now = now or time.time()
     findings: list[dict] = []
 
-    # 1) Are the timers alive at all? (backup mode: its hourly run instead)
-    backup_mode = bool(store.recent_runs(24, "backup")) and not store.recent_runs(24, "sync")
-    expected = (("backup", "hourly backup"),) if backup_mode else (("watch", "one-minute watch"),
-                                                                   ("sync", "30-minute sync"))
-    for command, label in expected:
-        runs = store.recent_runs(STALE_RUN_HOURS, command)
+    # 1) Are the timers alive at all? (backup mode: its runs every BRIDGE_BACKUP_HOURS instead)
+    every = getattr(settings, "backup_hours", 12)
+    last = {c: max((r["started"] for r in store.recent_runs(24 * 14, c)), default=0) for c in ("backup", "sync")}
+    backup_mode = last["backup"] > last["sync"]          # whichever ran last is the mode it runs in
+    expected = ((("backup", "backup", 2 * every + 1),) if backup_mode else
+                (("watch", "one-minute watch", STALE_RUN_HOURS), ("sync", "30-minute sync", STALE_RUN_HOURS)))
+    for command, label, hours in expected:
+        runs = store.recent_runs(hours, command)
         if not runs and store.recent_runs(24 * 14, command):      # ran before, not any more
             findings.append({"alert": True, "what": f"{label} not running",
-                             "detail": f"no {command} run recorded in the last {STALE_RUN_HOURS} h"})
+                             "detail": f"no {command} run recorded in the last {hours} h"})
 
     # 2) Activities that keep failing, uploads waiting for a human
     failed = [f for f in store.failed_activities() if (f.get("attempts") or 0) >= 2]

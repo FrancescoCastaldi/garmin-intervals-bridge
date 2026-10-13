@@ -7,7 +7,8 @@
 - **Backup mode** (`BRIDGE_MODE=backup`, `run --mode backup`, a choice in `setup`): your
   Garmin data in your own folder, no Intervals needed – every activity's original file
   with Garmin's summary and extras, each day's wellness (all endpoints and the watch's own
-  wellness files) once it is final and again three days later, the account weekly.
+  wellness files) once it is final and again three days later, the account weekly; a run
+  every 12 hours (`BRIDGE_BACKUP_HOURS`).
   `backup --from DATE` fills in the past, next to a running bridge. `docs/BACKUP.md`.
 
 ### Changed

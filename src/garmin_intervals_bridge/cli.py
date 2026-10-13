@@ -125,10 +125,12 @@ def build_parser() -> argparse.ArgumentParser:
                      help="Seconds between polls: Intervals in enrich mode (default 60), Garmin in upload mode "
                           "(default 600, min 300); also BRIDGE_POLL_SECONDS. BRIDGE_POLL_HOURS=10-18 polls only "
                           "then (the full runs go on)")
-    run.add_argument("--sync-minutes", type=int, help="Minutes between full runs (default 30, backup mode 60)")
+    run.add_argument("--sync-minutes", type=int,
+                     help="Minutes between full runs (default 30; backup mode: BRIDGE_BACKUP_HOURS, default 12 h)")
     run.add_argument("--iterations", type=int, help=argparse.SUPPRESS)      # tests
     backup = sub.add_parser("backup", help="Back up your Garmin data into the data folder – no Intervals needed: "
-                                           "without --from what backup mode does every hour, with --from the past")
+                                           "without --from what backup mode does every BRIDGE_BACKUP_HOURS (12), "
+                                           "with --from the past")
     backup.add_argument("--from", dest="start", metavar="DATE", help="The past from DATE (YYYY-MM-DD)")
     backup.add_argument("--to", dest="end", metavar="DATE", help="… up to DATE (default: yesterday)")
     backup.add_argument("--scope", choices=["all", "activities", "wellness", "account"], default="all")
@@ -679,7 +681,7 @@ def main(argv: list[str] | None = None) -> int:
                     mode = args.mode or settings.mode
                     # a Garmin poll (upload mode) costs three requests, an Intervals poll one small one
                     poll = args.poll_seconds or settings.poll_seconds or (600 if mode == "upload" else 60)
-                    every = args.sync_minutes or (60 if mode == "backup" else 30)
+                    every = args.sync_minutes or (settings.backup_hours * 60 if mode == "backup" else 30)
                     if poll < (300 if mode == "upload" else 30) or every < 5:
                         raise ValueError("--poll-seconds too small for this mode, or --sync-minutes < 5")
                     if settings.ui_port:

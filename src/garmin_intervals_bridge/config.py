@@ -242,6 +242,7 @@ class Settings:
     poll_seconds: int | None = None
     poll_hours: tuple = ()
     mode: str = "enrich"
+    backup_hours: int = 12
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -295,6 +296,7 @@ class Settings:
             poll_seconds=_positive_int("BRIDGE_POLL_SECONDS", 60, 24 * 3600) if _text("BRIDGE_POLL_SECONDS") else None,
             poll_hours=poll_hours(os.getenv("BRIDGE_POLL_HOURS", "")),
             mode=_mode(),
+            backup_hours=_positive_int("BRIDGE_BACKUP_HOURS", 12, 168),
             swap=_flag("BRIDGE_SWAP"),
             swap_hours=_positive_int("BRIDGE_SWAP_HOURS", 48, 24 * 30),
         )

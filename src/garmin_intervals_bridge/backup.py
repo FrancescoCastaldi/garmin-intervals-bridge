@@ -12,9 +12,10 @@ What it keeps, in the data folder:
   raw/account/<date>.json        weekly: profile, devices, zones, records, badges, workouts,
                                  plans, calendar
 
-When, kindly to Garmin: new activities every run (one list request, a download per new
-one); a day's wellness once it is final – at noon of the next day – and once more three
-days later for a watch that synced late (about 60 requests per day); the account once a week.
+When, kindly to Garmin: a run every BRIDGE_BACKUP_HOURS (12) – new activities (one list
+request, a download per new one); a day's wellness once it is final – at the first run after
+noon of the next day – and once more three days later for a watch that synced late (about
+60 requests per day); the account once a week.
 `backup --from DATE` fills in the past, resumably.
 """
 from __future__ import annotations
