@@ -5,6 +5,7 @@ import re
 import threading
 from pathlib import Path
 
+import pytest
 from test_webui import call, csrf, env  # noqa: F401  (the env fixture)
 
 from garmin_intervals_bridge import __version__, config, webui
@@ -107,7 +108,10 @@ def test_a_forged_ingress_path_is_not_echoed(env, monkeypatch):  # noqa: F811
 
 def _run_app(tmp_path, data, share):
     """home-assistant/run.sh with a stand-in bridge that records how it was started."""
+    import shutil
     import subprocess
+    if not shutil.which("sh"):
+        pytest.skip("sh shell not available on this platform")
     stub = tmp_path / "bin"
     stub.mkdir(exist_ok=True)
     (stub / "garmin-intervals-bridge").write_text('#!/bin/sh\necho "started: $*"\n')
