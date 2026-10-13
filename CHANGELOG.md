@@ -1,13 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.10.0 — 2026-10-13
 
-### Fixed
-
-- The daily summary ("last 24 h … Garmin requests", web page and health log) counted far
-  too many Garmin requests for `run`: every minute's poll recorded the whole request count of
-  the last full run again (it shares that Garmin session) – 50 real requests showed up as
-  2000. Only the count was wrong, not the requests. Thanks @Jeroen_Doesburg.
+Backup mode – your Garmin data in your own folder, no Intervals needed – a fuller wellness
+backfill, and a request counter that no longer scares anyone.
 
 ### Added
 
@@ -15,8 +11,8 @@
   Garmin data in your own folder, no Intervals needed – every activity's original file
   with Garmin's summary and extras, each day's wellness (all endpoints and the watch's own
   wellness files) once it is final and again three days later, the account weekly; a run
-  every 12 hours (`BRIDGE_BACKUP_HOURS`).
-  `backup --from DATE` fills in the past, next to a running bridge. `docs/BACKUP.md`.
+  every 12 hours (`BRIDGE_BACKUP_HOURS`). `backup --from DATE` fills in the past, next to
+  a running bridge. `docs/BACKUP.md`.
 
 ### Changed
 
@@ -24,6 +20,15 @@
   (15 instead of 12 requests per day; `--endpoints essential` for the old set). Thanks
   @Jetty. For days backfilled before: `--endpoints endurance_score,hill_score,race_predictions
   --force-wellness`.
+- Swap mode's wording says plainly that the deleted copy is the one in Intervals – nothing
+  on Garmin Connect is ever touched (thanks @DarKen).
+
+### Fixed
+
+- The daily summary ("last 24 h … Garmin requests", web page and health log) counted far
+  too many Garmin requests for `run`: every minute's poll recorded the whole request count of
+  the last full run again (it shares that Garmin session) – 50 real requests showed up as
+  2000. Only the count was wrong, not the requests. Thanks @Jeroen_Doesburg.
 
 ## 0.9.1 — 2026-10-12
 
