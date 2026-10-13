@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.10.1 — 2026-10-13
+
+The bridge as a Home Assistant app.
 
 ### Added
 
