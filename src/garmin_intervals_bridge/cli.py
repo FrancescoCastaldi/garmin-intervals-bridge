@@ -336,8 +336,7 @@ def run_loop(settings: Settings, store: Store, *, apply: bool, poll_seconds: int
             return 0
         except GarminBlocked as exc:
             on_page = isinstance(exc, GarminLoginNeeded) and getattr(settings, "ui_port", None)
-            log.warning("%s%s; pausing for 15 minutes", exc,
-                        f", or sign in on the web page (port {settings.ui_port})" if on_page else "")
+            log.warning("%s%s; pausing for 15 minutes", exc, ", or sign in on the web page" if on_page else "")
             if isinstance(exc, GarminLoginNeeded):
                 notices.login_needed(settings, store, intervals, datetime.now(settings.timezone).date(), apply=apply)
             next_sync = max(next_sync, time.time() + 900)
@@ -381,7 +380,8 @@ def run_backup_loop(settings: Settings, store: Store, *, every_minutes: int, ite
             log.info("Stopped")
             return 0
         except GarminBlocked as exc:
-            log.warning("%s; pausing for 15 minutes", exc)
+            on_page = isinstance(exc, GarminLoginNeeded) and getattr(settings, "ui_port", None)
+            log.warning("%s%s; pausing for 15 minutes", exc, ", or sign in on the web page" if on_page else "")
             if isinstance(exc, GarminLoginNeeded):
                 notices.login_needed(settings, store, None, datetime.now(settings.timezone).date(), apply=False)
             if iterations is None:

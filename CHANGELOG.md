@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Home Assistant app** (thanks @DarKen): add this repository to Home Assistant's app store;
+  settings in a form (mode, swap, advice, alerts, poll hours …), the web page with the Garmin
+  sign-in in the sidebar through ingress – only Home Assistant's proxy is let in, its users
+  are signed in already, every link lives under the ingress path. A data folder copied to
+  `share/garmin-bridge` is taken over on the first start. `docs/HOME_ASSISTANT.md`.
+- The settings of an app's form (`/data/options.json`) cover mode, swap, poll hours and
+  interval and the backup interval too.
+
 ## 0.10.0 — 2026-10-13
 
 Backup mode – your Garmin data in your own folder, no Intervals needed – a fuller wellness

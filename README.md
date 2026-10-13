@@ -4,7 +4,7 @@
 
 **Garmin filters the FIT files it sends to Intervals.icu. This puts the data back — and syncs a lot more.**
 
-**Set up in five minutes:** [Windows](https://github.com/futureweb/garmin-intervals-bridge/blob/main/docs/WINDOWS.md) · [Mac](https://github.com/futureweb/garmin-intervals-bridge/blob/main/docs/MAC.md) · [Synology](https://github.com/futureweb/garmin-intervals-bridge/blob/main/docs/SYNOLOGY.md) · [Unraid](https://github.com/futureweb/garmin-intervals-bridge/blob/main/docs/UNRAID.md) · [Linux & Docker](https://github.com/futureweb/garmin-intervals-bridge#running-it)
+**Set up in five minutes:** [Windows](https://github.com/futureweb/garmin-intervals-bridge/blob/main/docs/WINDOWS.md) · [Mac](https://github.com/futureweb/garmin-intervals-bridge/blob/main/docs/MAC.md) · [Synology](https://github.com/futureweb/garmin-intervals-bridge/blob/main/docs/SYNOLOGY.md) · [Unraid](https://github.com/futureweb/garmin-intervals-bridge/blob/main/docs/UNRAID.md) · [Home Assistant](https://github.com/futureweb/garmin-intervals-bridge/blob/main/docs/HOME_ASSISTANT.md) · [Linux & Docker](https://github.com/futureweb/garmin-intervals-bridge#running-it)
 
 - **Your Garmin metrics back** on every activity — Stamina, Recovery Time, VO₂max, Performance
   Condition, Training Effect, Sweat Loss … from the original file, nothing duplicated, training
@@ -430,6 +430,10 @@ file hash, start time) and never retried blindly: an upload with an unknown
 outcome stays `pending` until you check. Systemd users swap the watch timer
 for `deploy/systemd/garmin-intervals-bridge-upload.timer` (10 minutes) and
 keep the 30-minute unit for wellness.
+
+**Home Assistant:** an app (add-on) – settings in a form, the web page with the Garmin
+sign-in in the sidebar through ingress, no terminal: add this repository in Home Assistant's
+app store, see [docs/HOME_ASSISTANT.md](docs/HOME_ASSISTANT.md).
 
 **Docker / Podman:** a ready-made image is on the GitHub Container Registry,
 `ghcr.io/futureweb/garmin-intervals-bridge`, and on Docker Hub,

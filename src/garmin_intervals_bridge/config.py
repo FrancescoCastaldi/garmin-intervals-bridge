@@ -137,7 +137,9 @@ OPTIONS = {"intervals_api_key": "INTERVALS_API_KEY", "timezone": "BRIDGE_TIMEZON
            "imready4": "BRIDGE_IMREADY4_ENABLED", "hrvtrend": "BRIDGE_HRVTREND_ENABLED",
            "update_check": "BRIDGE_UPDATE_CHECK", "intervals_notes": "BRIDGE_INTERVALS_NOTES",
            "ui_password": "BRIDGE_UI_PASSWORD", "alert_email": "BRIDGE_ALERT_EMAIL",
-           "smtp_password": "BRIDGE_SMTP_PASSWORD", "ntfy_url": "BRIDGE_NTFY_URL"}
+           "smtp_password": "BRIDGE_SMTP_PASSWORD", "ntfy_url": "BRIDGE_NTFY_URL", "mode": "BRIDGE_MODE",
+           "swap": "BRIDGE_SWAP", "poll_hours": "BRIDGE_POLL_HOURS", "poll_seconds": "BRIDGE_POLL_SECONDS",
+           "backup_hours": "BRIDGE_BACKUP_HOURS"}
 
 
 def load_options_file(path: Path | None = None) -> list[str]:
