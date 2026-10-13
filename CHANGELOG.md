@@ -1,9 +1,20 @@
 # Changelog
 
-## Unreleased
+## 0.10.2 — 2026-10-13
+
+Kinder to Intervals.icu: a poll every 5 minutes, and a break when it asks for one.
+
+Upgrading needs no change. To keep polling every minute: `BRIDGE_POLL_SECONDS=60` (please
+only if you really need it). systemd users: the shipped watch timer now runs every 5 minutes;
+copy it again to take that over.
 
 ### Changed
 
+- **A poll every 5 minutes by default** instead of every minute (`run`, autostart,
+  containers, the Home Assistant app, the shipped systemd timer) – Intervals.icu asked
+  self-hosted tools not to poll every minute. New activities arrive within minutes.
+- **A break when Intervals asks for one:** an HTTP 429 pauses the polls and full runs for its
+  `Retry-After`, at least 15 minutes; the systemd timers skip their runs meanwhile.
 - The container image's default command is `run` (the bridge keeps running, a dry run until
   the command says `--apply`) instead of a one-time dry `sync`. Every template set `run`
   already.

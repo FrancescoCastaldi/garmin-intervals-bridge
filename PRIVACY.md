@@ -18,7 +18,7 @@ version (no personal data; `BRIDGE_UPDATE_CHECK=false` turns it off). No analyti
 telemetry, no third parties.
 
 **Webhooks** (optional, own server only): Intervals.icu tells the bridge that an activity
-arrived – its id and source – so it can act at once instead of asking every minute.
+arrived – its id and source – so it can act at once instead of asking every few minutes.
 
 **Removing it:** stop the bridge and delete its folder; revoke its access in
 Intervals.icu (*Settings → Developer Settings*, or the connected app) and, if you like,

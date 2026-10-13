@@ -28,7 +28,7 @@ from .gear import report as gear_report
 from .gear import save_config as save_gear_config
 from .gear import sync_recent as sync_gear_recent
 from .health import probe
-from .intervals import IntervalsClient
+from .intervals import IntervalsClient, rate_limited
 from .store import InstanceBusy, Store, single_instance
 from .sync import (
     backfill_intake,
@@ -113,7 +113,7 @@ def build_parser() -> argparse.ArgumentParser:
                                          "since the last poll, and read last night's wellness once the "
                                          "watch has synced (dry run unless --apply)")
     watch.add_argument("--apply", action="store_true")
-    run = sub.add_parser("run", help="Keep running: poll Intervals every minute, full sync every 30 minutes, "
+    run = sub.add_parser("run", help="Keep running: poll Intervals every 5 minutes, full sync every 30 minutes, "
                                      "health probe once a day. For Windows and anything without systemd "
                                      "(dry run unless --apply)")
     run.add_argument("--apply", action="store_true")
@@ -122,7 +122,7 @@ def build_parser() -> argparse.ArgumentParser:
                           "upload = official import off, the bridge uploads every original as your own file; "
                           "backup = Garmin only, your data into the data folder, no Intervals (default: BRIDGE_MODE)")
     run.add_argument("--poll-seconds", type=int,
-                     help="Seconds between polls: Intervals in enrich mode (default 60), Garmin in upload mode "
+                     help="Seconds between polls: Intervals in enrich mode (default 300), Garmin in upload mode "
                           "(default 600, min 300); also BRIDGE_POLL_SECONDS. BRIDGE_POLL_HOURS=10-18 polls only "
                           "then (the full runs go on)")
     run.add_argument("--sync-minutes", type=int,
@@ -271,7 +271,9 @@ def run_loop(settings: Settings, store: Store, *, apply: bool, poll_seconds: int
         count += 1
         now = time.time()
         try:
-            if now >= next_sync:
+            if intervals_paused(store):
+                pass                                    # Intervals asked for a break (429): nothing at all
+            elif now >= next_sync:
                 garmin = GarminSource(settings.token_dir, settings.garmin_request_delay)
                 results: dict = {"apply": apply, "scope": "all", "mode": mode}
                 if mode == "upload":
@@ -344,7 +346,9 @@ def run_loop(settings: Settings, store: Store, *, apply: bool, poll_seconds: int
                 next_sync = 0                               # signed in on the web page: go on now
             continue
         except Exception as exc:
-            if exc.__class__.__module__.startswith("requests"):
+            if pause_on_rate_limit(store, exc):
+                next_sync = max(next_sync, time.time() + RATE_LIMIT_PAUSE_SECONDS)
+            elif exc.__class__.__module__.startswith("requests"):
                 log.error("HTTP/API request failed: %s", type(exc).__name__)
             else:
                 log.error("%s: %s", type(exc).__name__, exc)
@@ -392,6 +396,27 @@ def run_backup_loop(settings: Settings, store: Store, *, every_minutes: int, ite
         if iterations is None or count < iterations:
             time.sleep(every_minutes * 60)
     return 0
+
+
+PAUSE_KEY = "intervals:paused_until"
+RATE_LIMIT_PAUSE_SECONDS = 900
+
+
+def intervals_paused(store: Store) -> float:
+    """Seconds left of a pause Intervals asked for (HTTP 429); 0 when there is none."""
+    return max(0.0, float(store.get_meta(PAUSE_KEY) or 0) - time.time())
+
+
+def pause_on_rate_limit(store: Store, exc: BaseException) -> float | None:
+    """Intervals answered 429: no polls, no full runs for its Retry-After, at least 15 minutes."""
+    asked = rate_limited(exc)
+    if asked is None:
+        return None
+    pause = max(asked, RATE_LIMIT_PAUSE_SECONDS)
+    store.set_meta(PAUSE_KEY, f"{time.time() + pause:.0f}")
+    logging.getLogger("bridge").warning("Intervals.icu asks to slow down (HTTP 429): pausing for %d minutes",
+                                        round(pause / 60))
+    return pause
 
 
 def wait_after_block(exc: GarminBlocked, seconds: float = 900) -> bool:
@@ -682,7 +707,8 @@ def main(argv: list[str] | None = None) -> int:
                 if args.cmd == "run":
                     mode = args.mode or settings.mode
                     # a Garmin poll (upload mode) costs three requests, an Intervals poll one small one
-                    poll = args.poll_seconds or settings.poll_seconds or (600 if mode == "upload" else 60)
+                    # Intervals asked for no minute polling: every 5 minutes by default
+                    poll = args.poll_seconds or settings.poll_seconds or (600 if mode == "upload" else 300)
                     every = args.sync_minutes or (settings.backup_hours * 60 if mode == "backup" else 30)
                     if poll < (300 if mode == "upload" else 30) or every < 5:
                         raise ValueError("--poll-seconds too small for this mode, or --sync-minutes < 5")
@@ -713,6 +739,10 @@ def main(argv: list[str] | None = None) -> int:
                     store.record_run("backup", out)
                     log.info("Backup: %s", describe_backup(out))
                     print(json.dumps(out, indent=2))
+                    return 0
+                if args.cmd in ("watch", "sync") and intervals_paused(store):
+                    print(json.dumps({"apply": getattr(args, "apply", False),
+                                      "skipped": "Intervals asked for a pause (HTTP 429)"}))
                     return 0
                 if args.cmd == "watch" and not within_hours(datetime.now(settings.timezone), settings.poll_hours):
                     print(json.dumps({"apply": args.apply, "skipped": "outside BRIDGE_POLL_HOURS"}))
@@ -819,6 +849,9 @@ def main(argv: list[str] | None = None) -> int:
                     intervals = IntervalsClient(settings.intervals_api_key, settings.intervals_athlete_id)
                     notices.login_needed(settings, store, intervals, datetime.now(settings.timezone).date(),
                                          apply=True)
+                raise
+            except Exception as exc:
+                pause_on_rate_limit(store, exc)                 # the timers then skip their runs too
                 raise
             finally:
                 store.close()

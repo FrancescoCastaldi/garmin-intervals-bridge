@@ -5,7 +5,7 @@
 # which happens only on the owner's explicit decision.
 [Unit]
 OnFailure=garmin-intervals-bridge-alert@%n.service
-Description=Garmin -> Intervals.icu bridge: one-minute watch for new activities
+Description=Garmin -> Intervals.icu bridge: watch for new activities
 After=network-online.target
 Wants=network-online.target
 

@@ -1,6 +1,6 @@
 """Swap mode (BRIDGE_SWAP=true, off by default): Garmin's filtered copy for the original.
 
-The official import stays on and is the trigger: within a minute of a Garmin activity
+The official import stays on and is the trigger: with the next poll after a Garmin activity
 arriving in Intervals, the bridge uploads the device's original file as your own and
 then deletes the filtered copy Garmin's import created in Intervals (Garmin Connect is
 only ever read, never changed). Intervals then holds the complete file – it

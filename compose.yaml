@@ -23,11 +23,11 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
-    # `docker compose up -d` keeps the bridge running (polls Intervals every minute, a full run
+    # `docker compose up -d` keeps the bridge running (polls Intervals every 5 minutes, a full run
     # every 30 minutes) and restarts it after a reboot. It starts as a dry run: read what it would
     # do with `docker compose logs -f`, then change the command to ["run", "--apply"] and `up -d`
     # again. Set BRIDGE_TIMEZONE in .env: a container has no time zone of its own.
-    # (Cron instead: `docker compose run --rm -T bridge watch --apply` every minute and
+    # (Cron instead: `docker compose run --rm -T bridge watch --apply` every 5 minutes and
     # `... sync --apply` every 30 minutes; leave the service itself stopped then.)
     restart: unless-stopped
     command: ["run"]

@@ -29,8 +29,22 @@ def _retry_after(response: Any, attempt: int) -> float:
     return max(1.0, min(value, RETRY_AFTER_CAP_SECONDS))
 
 
+def rate_limited(exc: BaseException) -> float | None:
+    """Seconds Intervals asks a client to wait when it answered 429 (0: it did not say);
+    None for any other error. A GET whose retries ran out on 429s counts too."""
+    if isinstance(exc, requests.exceptions.RetryError):
+        return 0.0 if "429" in str(exc) else None
+    response = getattr(exc, "response", None)
+    if getattr(response, "status_code", None) != 429:
+        return None
+    try:
+        return max(0.0, float(response.headers.get("Retry-After")))
+    except (AttributeError, TypeError, ValueError):
+        return 0.0
+
+
 class _CappedRetry(Retry):
-    """Honour Retry-After on 429, but never park a one-minute poll for longer than its
+    """Honour Retry-After on 429, but never park a poll for longer than its
     own timer period (urllib3 would otherwise sleep for up to six hours)."""
 
     def get_retry_after(self, response):
@@ -123,7 +137,7 @@ class IntervalsClient:
                    limit: int | None = None) -> list[dict]:
         params: dict = {"oldest": oldest.isoformat(), "newest": newest.isoformat()}
         if fields:
-            params["fields"] = ",".join(fields)     # small answers: a one-minute poll is ~450 bytes
+            params["fields"] = ",".join(fields)     # small answers: a poll is ~450 bytes
         if limit:
             params["limit"] = limit
         result = self._request("GET", "/activities", params=params)

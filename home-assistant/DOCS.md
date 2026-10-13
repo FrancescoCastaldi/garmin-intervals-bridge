@@ -18,7 +18,7 @@ Home Assistant, no Intervals needed.
 3. The **Log** tab (or the web page's *Log*) now shows what the bridge *would* write. When
    that looks right: **Write to Intervals** on, *Save*, restart the app.
 
-That's it. It checks Intervals every minute and enriches a new activity within a minute
+That's it. It checks Intervals every 5 minutes and enriches a new activity within minutes
 of Garmin's import; last night's wellness arrives once your watch has synced.
 
 ## Moving in from a NAS or another computer

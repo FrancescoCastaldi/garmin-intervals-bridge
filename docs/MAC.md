@@ -76,7 +76,7 @@ In Terminal, `cd ~/GarminBridge` first:
 | Stop it for good | `venv/bin/garmin-intervals-bridge autostart --remove` |
 | Start it again | `venv/bin/garmin-intervals-bridge autostart` |
 
-It polls Intervals every minute, does a full run every 30 minutes and checks
+It polls Intervals every 5 minutes, does a full run every 30 minutes and checks
 itself once a day; if it ever stops on an error, it is started again after
 five minutes. Once a day it also looks whether a newer version exists and
 says so in the log.

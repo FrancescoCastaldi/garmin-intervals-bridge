@@ -112,7 +112,7 @@ to
 ```
 
 *Save*, and let Container Manager rebuild the project (or *Action → Stop*,
-then *Build*). From now on it polls Intervals every minute, does a full run
+then *Build*). From now on it polls Intervals every 5 minutes, does a full run
 every 30 minutes and writes a health line once a day.
 
 ## 6. Your gear (optional)

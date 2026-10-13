@@ -324,7 +324,7 @@ class Store:
 @contextmanager
 def single_instance(data_dir: Path, scopes: tuple[str, ...] = ("activities", "wellness")):
     """Avoid overlapping runs per scope: a long wellness backfill must not block the
-    one-minute activity watcher. SQLite (WAL) is safe for both to share."""
+    activity watcher. SQLite (WAL) is safe for both to share."""
     try:
         import fcntl
 

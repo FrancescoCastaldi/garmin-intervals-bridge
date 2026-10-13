@@ -57,7 +57,7 @@ The container's log (icon → *Logs*) lists what the dry run would enrich and
 write. When that looks right: icon → *Edit*, switch to the *Advanced View*
 (top right), change **Post Arguments** from `run` to `run --apply`, *Apply*.
 
-From now on it polls Intervals every minute, does a full run every 30
+From now on it polls Intervals every 5 minutes, does a full run every 30
 minutes and checks itself once a day; Unraid restarts it with the array.
 
 ## Gear, the past, updating

@@ -52,7 +52,7 @@ This bridge is a small self-hosted service that:
 - adds exactly **what Garmin stripped**, into the custom fields and streams *you* have configured (Stamina curve, Recovery Time, VO₂max, Performance Condition, Sweat Loss, Training Effect …);
 - fills the **daily wellness values the official sync does not deliver**: night SpO₂, respiration, sleeping heart rate, Body Battery, HRV details, sleep stages, stress, readiness, floors, scale data — and your **logged nutrition** (kcal, carbs, protein, fat);
 - can **backfill the past** (on the reference account SpO₂ had silently stopped arriving in mid-2025);
-- reacts within about a minute of the official import, with Garmin contacted only when there is something new.
+- reacts within minutes of the official import (it asks Intervals every 5 minutes), with Garmin contacted only when there is something new.
 
 Everything is a dry run until you say `--apply`. Values that exist are never
 overwritten unless they demonstrably came from a filtered file.
@@ -73,7 +73,7 @@ from Docker Hub or as a Claude Desktop bundle; [more below](#use-it-with-an-ai-c
 | **Rule** | Only what the partner copy lacks; aligned by timestamp; idempotent | Only empty values; locked days skipped; today's running totals wait until tomorrow |
 | **Archive** | Original + partner copy of every activity, Garmin's summary, weather, gear, splits | Raw JSON of every endpoint and the watch's original wellness files (Health Snapshots included), every day |
 
-Version 0.10.1. Verified end to end on one account (fenix 8, Edge 1040); what changed
+Version 0.10.2. Verified end to end on one account (fenix 8, Edge 1040); what changed
 when is in the [CHANGELOG](CHANGELOG.md), where it goes next in the
 [roadmap](docs/ROADMAP.md).
 
@@ -180,7 +180,7 @@ run is exactly what `--apply` would send.
 | `gear [--prefer intervals\|evidence\|garmin] [--map G=I] [--create] [--apply]` | Put Garmin's gear (bikes, shoes, skis …) on the Intervals activities, from the archive; see [Gear](#gear). |
 | `imready4 [--date D \| --from D [--to D]] [--compare] [--apply] [--overwrite]` | ImReady4-compatible training advice into `TrainingAdvice`: preview, comparison with existing values, filling the past; see [Training advice](#training-advice-imready4). |
 | `hrvtrend [--date D \| --from D [--to D]] [--compare] [--apply] [--overwrite]` | Experimental trend advice into its own field `HRVTrendAdvice`, compared with ImReady4's; see [docs/HRV_TREND.md](docs/HRV_TREND.md). |
-| `run [--apply] [--mode …] [--poll-seconds N] [--sync-minutes N]` | Keep running in one process: a poll every minute, a full run every 30 minutes, the daily health check (what autostart, the containers and the Home Assistant app start). See [Running it](#running-it). |
+| `run [--apply] [--mode …] [--poll-seconds N] [--sync-minutes N]` | Keep running in one process: a poll every 5 minutes, a full run every 30 minutes, the daily health check (what autostart, the containers and the Home Assistant app start). See [Running it](#running-it). |
 | `status` | Pending uploads and failed activities with their retry time. |
 | `reset-pending --activity-id <garmin id>` | Upload mode: clear a pending upload after you checked Intervals by hand. |
 | `snapshot-account [--history-from DATE]` | Archive what is not a time series: profile, settings, devices, zones, gear, records, badges, workouts, plans, the calendar. |
@@ -208,7 +208,7 @@ later, about 60 requests a day. `backup --from DATE` fills in the past. See
 [docs/BACKUP.md](docs/BACKUP.md).
 
 **swap** (`BRIDGE_SWAP=true` on top of enrich, off by default). The official import
-stays on and is the trigger: within a minute of Garmin's filtered copy arriving, the
+stays on and is the trigger: with the next poll after Garmin's filtered copy arrives, the
 bridge uploads the device's original as your own file, carries over what you may have
 set already (name, description, the paired workout, type, RPE, feel, tags, gear,
 commute/race, ignore settings), then **deletes the copy Garmin's import created in
@@ -399,13 +399,13 @@ Claude Desktop: open `futureweb-intervals-mcp-1.0.0b1.mcpb` from the
 ## Running it
 
 **systemd (recommended, no container):** an unprivileged service user, a
-one-minute `watch` timer and a 30-minute full run, secrets in an
+five-minute `watch` timer and a 30-minute full run, secrets in an
 `EnvironmentFile`, hardened units. See [deploy/README.md](deploy/README.md).
 
 **Windows, macOS or any PC without systemd:** `pip install garmin-intervals-bridge`
 (it is on [PyPI](https://pypi.org/project/garmin-intervals-bridge/)), then `garmin-intervals-bridge setup`
 (on Windows `py -m garmin_intervals_bridge setup`, which Smart App Control does not block).
-In the background it runs `run --apply`: one process that polls Intervals every minute, does a
+In the background it runs `run --apply`: one process that polls Intervals every 5 minutes, does a
 full run every 30 minutes and a health probe once a day, logging to `~/GarminBridge/bridge.log`.
 `garmin-intervals-bridge run --apply` does the same in a window. Step-by-step guides for
 non-technical users: [Windows](docs/WINDOWS.md), [Mac](docs/MAC.md).
@@ -480,7 +480,7 @@ other command just uses those tokens. If Garmin answers the login with
 
 The compose service runs `run` and restarts with the machine. Prefer cron? Leave
 the service stopped and schedule `docker compose run --rm -T bridge watch --apply`
-every minute and `... sync --apply` every 30 minutes instead.
+every 5 minutes and `... sync --apply` every 30 minutes instead.
 
 ### The web page
 
@@ -549,7 +549,7 @@ win. Relative paths in a settings file count from its folder.
 | `BRIDGE_NTFY_URL`, `BRIDGE_NTFY_TOKEN` | | Alerts as push messages (ntfy topic URL; a token for a protected server) |
 | `BRIDGE_BACKUP_HOURS` | `12` | Backup mode: hours between runs (1–168); a day's wellness is taken once it is final either way |
 | `BRIDGE_MODE` | `enrich` | What `run` does without `--mode`: `enrich`, `upload` or `backup` (Garmin only, no Intervals) |
-| `BRIDGE_POLL_SECONDS` | `60` (upload mode `600`) | Seconds between the polls of `run` (`--poll-seconds` wins) |
+| `BRIDGE_POLL_SECONDS` | `300` (upload mode `600`) | Seconds between the polls of `run` (`--poll-seconds` wins) |
 | `BRIDGE_POLL_HOURS` | always | Poll only in these hours, e.g. `10-18` or `6-9,16-22` (`22-6` runs over midnight). Outside them `run` skips its polls and `watch` does nothing; the half-hourly full runs go on, so an activity still arrives (within about two hours) and so does last night's wellness |
 | `BRIDGE_SWAP` | `false` | `true`: swap Garmin's filtered copy of each new activity for its original (upload, then delete the copy; see [Modes](#modes)) |
 | `BRIDGE_SWAP_HOURS` | `48` | Only copies imported this recently are swapped automatically |

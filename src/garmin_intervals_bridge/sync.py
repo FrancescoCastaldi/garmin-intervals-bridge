@@ -738,7 +738,7 @@ def _wellness_metrics() -> dict:
 
 def wellness_check(settings: Settings, garmin: Any, intervals: Any, store: Store, *, apply: bool,
                    now: datetime | None = None, lookback: int | None = None, throttle: bool = True) -> dict:
-    """The scheduled wellness run; cheap enough to be called every minute.
+    """The scheduled wellness run; cheap enough to be called with every poll.
 
     Today: nothing is asked of Garmin until there is a night to read. The evidence is
     Intervals' own record for today: once the official integration has put the sleep
@@ -970,9 +970,9 @@ def watch_once(settings: Settings, garmin: Any, intervals: Any, store: Store, *,
                today: date | None = None) -> dict:
     """One cheap poll of Intervals; Garmin is contacted only for activities seen for the first time.
 
-    Intervals offers no push. Polling it every minute costs one ~450-byte request;
+    Intervals offers no push. A poll (every 5 minutes by default) costs one ~450-byte request;
     the official import then triggers exactly one original download per new
-    Garmin activity, typically within a minute of the activity appearing. An
+    Garmin activity, typically within minutes of the activity appearing. An
     activity seen before as someone else's copy (Strava's, typically, when it
     arrived first) that Intervals has since turned into Garmin's own is taken up
     then too, instead of waiting for the next full scan.

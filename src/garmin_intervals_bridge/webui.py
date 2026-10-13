@@ -338,7 +338,7 @@ class UI:
         finally:
             store.close()
         notices.SIGNED_IN.set()
-        soon = "goes on with it within a minute" if self.in_run else "uses it within 15 minutes"
+        soon = "goes on with it at once" if self.in_run else "uses it within 15 minutes"
         return self.page(session, "Garmin Connect", f'<section><p class="ok"><b>Signed in.</b> The session is saved; '
                          f'the running bridge {soon}.</p><p><a href="/">Back to the status</a></p></section>')
 

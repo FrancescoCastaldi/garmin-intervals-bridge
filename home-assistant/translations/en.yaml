@@ -37,7 +37,7 @@ configuration:
     description: Look for new activities only then, e.g. 6-22 (empty = always).
   poll_seconds:
     name: Poll interval
-    description: Seconds between the checks for new activities (default 60).
+    description: Seconds between the checks for new activities (default 300).
   backup_hours:
     name: Backup interval
     description: Backup mode – hours between runs (default 12).

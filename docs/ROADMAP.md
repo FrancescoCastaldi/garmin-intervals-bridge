@@ -32,7 +32,7 @@ Asked for in the [feature request](https://forum.intervals.icu/t/api-upload-a-fi
 - **Upload a file onto an existing activity** – the original into the activity Garmin's import
   created: no new id, nothing to delete, swap mode without its catch.
 - **Being told about a new activity** (a webhook per API key, or an event stream) instead of
-  asking every minute.
+  asking every few minutes.
 
 ## Deliberately not
 

@@ -672,3 +672,41 @@ def test_a_poll_counts_only_its_own_garmin_requests(tmp_path, monkeypatch):
     cli.run_loop(_loop_settings(tmp_path), st, apply=True, poll_seconds=60, sync_minutes=30, iterations=4)
     assert [r["metrics"]["garmin_requests"] for r in st.recent_runs(1)] == [50, 1, 0, 0]
     st.close()
+
+
+def test_a_429_from_intervals_pauses_the_bridge(tmp_path, monkeypatch, capsys):
+    from requests import HTTPError, Response
+    from requests.exceptions import RetryError
+
+    from garmin_intervals_bridge import cli
+    from garmin_intervals_bridge.intervals import rate_limited
+
+    limited = Response()
+    limited.status_code, limited.headers["Retry-After"] = 429, "3600"
+    assert rate_limited(HTTPError("429", response=limited)) == 3600
+    assert rate_limited(RetryError("Max retries exceeded (too many 429 error responses)")) == 0
+    other = Response()
+    other.status_code = 500
+    assert rate_limited(HTTPError("500", response=other)) is None and rate_limited(ValueError()) is None
+
+    calls = []
+
+    def poll(*a, **k):
+        calls.append("poll")
+        raise HTTPError("429", response=limited)
+    monkeypatch.setattr(cli, "sync_enrich", lambda *a, **k: calls.append("sync") or {"seen": 0, "enriched": 0,
+                                                                                    "planned": 0})
+    monkeypatch.setattr(cli, "sync_wellness", lambda *a, **k: {"days_checked": 0, "writes": 0})
+    monkeypatch.setattr(cli, "watch_once", poll)
+    monkeypatch.setattr(cli, "wellness_check", lambda *a, **k: {})
+    monkeypatch.setattr(cli.time, "sleep", lambda s: None)
+    st = Store(tmp_path)
+    cli.run_loop(_loop_settings(tmp_path), st, apply=True, poll_seconds=300, sync_minutes=30, iterations=4)
+    assert calls == ["sync", "poll"]                      # after the 429: nothing more for its hour
+    assert 3500 < cli.intervals_paused(st) <= 3601                # Retry-After, rounded to the second
+    st.close()
+    # the timers skip their runs while the pause lasts
+    monkeypatch.setenv("BRIDGE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("INTERVALS_API_KEY", "not-a-real-key")
+    monkeypatch.setattr(cli, "watch_once", lambda *a, **k: pytest.fail("no poll during the pause"))
+    assert main(["watch", "--apply"]) == 0 and "HTTP 429" in capsys.readouterr().out

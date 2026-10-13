@@ -68,7 +68,7 @@ PowerShell window:
 | Stop it for good | `py -m garmin_intervals_bridge autostart --remove` |
 | Start it again | `py -m garmin_intervals_bridge autostart` |
 
-It polls Intervals every minute, does a full run every 30 minutes and checks
+It polls Intervals every 5 minutes, does a full run every 30 minutes and checks
 itself once a day. When the PC sleeps, it catches up after waking up. Once a
 day it also looks whether a newer version exists and says so in the log.
 

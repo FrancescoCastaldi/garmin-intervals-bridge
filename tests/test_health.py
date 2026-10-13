@@ -125,7 +125,7 @@ def test_dead_timers_and_repeated_failures_alert(tmp_path):
     st.record_failure("77", "boom")
     st.record_failure("77", "boom again")
     f = {x["what"]: x for x in silent_error_checks(cfg(tmp_path), st)}
-    assert f["one-minute watch not running"]["alert"] is True
+    assert f["watch for new activities not running"]["alert"] is True
     assert f["1 activities failing repeatedly"]["alert"] is True
     assert "30-minute sync not running" not in f            # never ran before: nothing to miss
     st.close()

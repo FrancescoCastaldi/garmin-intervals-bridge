@@ -109,7 +109,7 @@ def silent_error_checks(settings: Any, store: Any, *, now: float | None = None) 
     last = {c: max((r["started"] for r in store.recent_runs(24 * 14, c)), default=0) for c in ("backup", "sync")}
     backup_mode = last["backup"] > last["sync"]          # whichever ran last is the mode it runs in
     expected = ((("backup", "backup", 2 * every + 1),) if backup_mode else
-                (("watch", "one-minute watch", STALE_RUN_HOURS), ("sync", "30-minute sync", STALE_RUN_HOURS)))
+                (("watch", "watch for new activities", STALE_RUN_HOURS), ("sync", "30-minute sync", STALE_RUN_HOURS)))
     for command, label, hours in expected:
         runs = store.recent_runs(hours, command)
         if not runs and store.recent_runs(24 * 14, command):      # ran before, not any more
