@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Home Assistant app: the web page in the sidebar showed "refused to connect" – it forbade
+  every frame, Home Assistant's own included. Behind ingress Home Assistant may frame it now
+  (same origin only); everywhere else framing stays forbidden. Thanks @DarKen.
+- Home Assistant app: a data folder copied to `share/garmin-bridge` after the app's first
+  start was never taken over (that start had left an empty database). It is taken over now
+  as long as the app has no Garmin session and no archive of its own – once, never over them.
+
 ## 0.10.2 — 2026-10-13
 
 Kinder to Intervals.icu: a poll every 5 minutes, and a break when it asks for one.

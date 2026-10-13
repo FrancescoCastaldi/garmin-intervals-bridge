@@ -74,6 +74,10 @@ HEADERS = {
     "Referrer-Policy": "no-referrer",
     "Cache-Control": "no-store",
 }
+# Home Assistant shows an ingress page in a frame of its own (same origin): that one frame is allowed
+INGRESS_HEADERS = {**HEADERS, "X-Frame-Options": "SAMEORIGIN",
+                   "Content-Security-Policy": HEADERS["Content-Security-Policy"].replace(
+                       "frame-ancestors 'none'", "frame-ancestors 'self'")}
 STYLE = """
 body{font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:0;background:#f6f7f9;color:#1d2330}
 header{background:#1d2330;color:#fff;padding:10px 16px}header a{color:#cfd6e4;margin-right:14px;text-decoration:none}
@@ -692,7 +696,8 @@ def handler_for(ui: UI) -> type[BaseHTTPRequestHandler]:
                     headers = {**headers, "Location": self.prefix + headers["Location"]}
             data = body.encode("utf-8")
             self.send_response(status)
-            for name, value in {**HEADERS, "Content-Type": "text/html; charset=utf-8", **(headers or {})}.items():
+            base = INGRESS_HEADERS if ui.ingress else HEADERS
+            for name, value in {**base, "Content-Type": "text/html; charset=utf-8", **(headers or {})}.items():
                 self.send_header(name, value)
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()

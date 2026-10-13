@@ -103,3 +103,64 @@ def test_a_forged_ingress_path_is_not_echoed(env, monkeypatch):  # noqa: F811
     finally:
         server.shutdown()
         server.server_close()
+
+
+def _run_app(tmp_path, data, share):
+    """home-assistant/run.sh with a stand-in bridge that records how it was started."""
+    import subprocess
+    stub = tmp_path / "bin"
+    stub.mkdir(exist_ok=True)
+    (stub / "garmin-intervals-bridge").write_text('#!/bin/sh\necho "started: $*"\n')
+    (stub / "garmin-intervals-bridge").chmod(0o755)
+    environment = {"PATH": f"{stub}:{os.environ['PATH']}", "HA_DATA": str(data), "HA_SHARE": str(share)}
+    return subprocess.run(["sh", str(APP / "run.sh")], env=environment, capture_output=True, text=True,
+                          check=True).stdout
+
+
+def test_the_app_takes_a_data_folder_over_even_after_an_empty_first_start(tmp_path):
+    data, share = tmp_path / "data", tmp_path / "share"
+    (data / "tokens").mkdir(parents=True)
+    (data / "bridge.db").write_text("empty, from a start before the folder was there")
+    (data / "options.json").write_text('{"write_to_intervals": false}')
+    (share / "garmin-bridge" / "tokens").mkdir(parents=True)
+    (share / "garmin-bridge" / "bridge.db").write_text("the NAS's")
+    (share / "garmin-bridge" / "tokens" / "garmin_tokens.json").write_text("{}")
+    out = _run_app(tmp_path, data, share)
+    assert "Taking over" in out and "started: run\n" in out                       # dry run: no --apply
+    assert (data / "bridge.db").read_text() == "the NAS's" and (data / "tokens" / "garmin_tokens.json").exists()
+    assert (data / "options.json").read_text() == '{"write_to_intervals": false}'   # the form stays
+    # never again, and never over a session of its own
+    (data / "bridge.db").write_text("its own by now")
+    (data / "options.json").write_text('{"write_to_intervals": true}')
+    out = _run_app(tmp_path, data, share)
+    assert "Taking over" not in out and "started: run --apply" in out and (data / "bridge.db").read_text() == \
+        "its own by now"
+
+
+def test_the_app_never_takes_over_when_it_has_a_session(tmp_path):
+    data, share = tmp_path / "data", tmp_path / "share"
+    (data / "tokens").mkdir(parents=True)
+    (data / "tokens" / "garmin_tokens.json").write_text("{}")
+    (data / "options.json").write_text("{}")
+    (share / "garmin-bridge").mkdir(parents=True)
+    (share / "garmin-bridge" / "bridge.db").write_text("the NAS's")
+    assert "Taking over" not in _run_app(tmp_path, data, share)
+
+
+def test_home_assistant_may_frame_the_page_and_nobody_else(env, monkeypatch):  # noqa: F811
+    import http.client
+    monkeypatch.setattr(webui, "INGRESS_IP", "127.0.0.1")
+    ui = webui.UI(host="0.0.0.0", port=0, in_run=True, ingress=True, newer_release=lambda: None)
+    server = webui.make_server(ui)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        conn = http.client.HTTPConnection("127.0.0.1", ui.port, timeout=10)
+        conn.request("GET", "/", headers={"X-Ingress-Path": "/api/hassio_ingress/abc"})
+        r = conn.getresponse()
+        assert r.getheader("X-Frame-Options") == "SAMEORIGIN"
+        assert "frame-ancestors 'self'" in r.getheader("Content-Security-Policy")
+        conn.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert webui.HEADERS["X-Frame-Options"] == "DENY"                   # everywhere else: no frames at all
