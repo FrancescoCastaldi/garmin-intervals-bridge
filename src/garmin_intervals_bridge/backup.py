@@ -134,12 +134,11 @@ def backup_range(settings: Any, garmin: Any, store: Any, *, start: date, end: da
     """The past: activities, wellness (days already on disk are skipped unless `force`), the account."""
     metrics = new_metrics()
     today = datetime.now(settings.timezone).date()
-    end = min(end, today - timedelta(days=1))
     if "activities" in scopes:
-        _activities(garmin, store, start, end, metrics, pause=pause)
+        _activities(garmin, store, start, min(end, today), metrics, pause=pause)
     if "wellness" in scopes:
-        day = start
-        while day <= end:
+        day, last = start, min(end, today - timedelta(days=1))      # wellness: only finished days
+        while day <= last:
             if force or store.load_snapshot(day) is None or endpoints:
                 try:
                     _wellness_day(day, garmin, store, metrics, endpoints, files=True)
