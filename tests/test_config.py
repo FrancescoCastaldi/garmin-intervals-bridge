@@ -39,3 +39,31 @@ def test_poll_hours_ranges_also_over_midnight():
     for bad in ("10", "10-10", "25-3", "morning"):
         with pytest.raises(ValueError, match="BRIDGE_POLL_HOURS"):
             config.poll_hours(bad)
+
+
+def test_positive_int_fallback_and_validation(monkeypatch):
+    monkeypatch.delenv("TEST_VAR", raising=False)
+    assert config._positive_int("TEST_VAR", 5, 10) == 5
+
+    monkeypatch.setenv("TEST_VAR", "")
+    assert config._positive_int("TEST_VAR", 5, 10) == 5
+
+    monkeypatch.setenv("TEST_VAR", "   ")
+    assert config._positive_int("TEST_VAR", 5, 10) == 5
+
+    monkeypatch.setenv("TEST_VAR", " 8 ")
+    assert config._positive_int("TEST_VAR", 5, 10) == 8
+
+    monkeypatch.setenv("TEST_VAR", "15")
+    with pytest.raises(ValueError, match="TEST_VAR must be between 1 and 10"):
+        config._positive_int("TEST_VAR", 5, 10)
+
+
+def test_delay_empty_fallback(monkeypatch):
+    from unittest.mock import patch
+    monkeypatch.setenv("BRIDGE_GARMIN_REQUEST_DELAY", "   ")
+    with patch.object(config, "load_env_file"), patch.object(config, "load_options_file"):
+        monkeypatch.setenv("INTERVALS_API_KEY", "test-key")
+        settings = config.Settings.from_env()
+        assert settings.garmin_request_delay == 0.5
+
