@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Fixed
+
+- The daily summary ("last 24 h … Garmin requests", web page and health log) counted far
+  too many Garmin requests for `run`: every minute's poll recorded the whole request count of
+  the last full run again (it shares that Garmin session) – 50 real requests showed up as
+  2000. Only the count was wrong, not the requests. Thanks @Jeroen_Doesburg.
+
 ### Added
 
 - **Backup mode** (`BRIDGE_MODE=backup`, `run --mode backup`, a choice in `setup`): your

@@ -315,11 +315,13 @@ def run_loop(settings: Settings, store: Store, *, apply: bool, poll_seconds: int
                 if result.get("uploaded") or result.get("would_upload"):
                     log.info("Garmin poll: %d uploaded, %d would upload", result["uploaded"], result["would_upload"])
             else:
+                # the poll shares the full run's Garmin session: count only its own requests
+                before = garmin.requests
                 result = watch_once(settings, garmin, intervals, store, apply=apply)
                 wellness = wellness_check(settings, garmin, intervals, store, apply=apply)
                 if wellness.get("intervals_checks"):
                     result["wellness"] = wellness
-                store.record_run("watch", {"apply": apply, "garmin_requests": garmin.requests, **result})
+                store.record_run("watch", {"apply": apply, "garmin_requests": garmin.requests - before, **result})
                 if result["new"]:
                     log.info("Poll: %d new, %d enriched, %d planned", result["new"], result["enriched"],
                              result["planned"])

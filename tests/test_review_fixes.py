@@ -642,3 +642,33 @@ def test_poll_seconds_from_the_settings(tmp_path, monkeypatch):
     assert main(["run", "--poll-seconds", "120"]) == 0 and seen["poll_seconds"] == 120     # the option wins
     monkeypatch.delenv("BRIDGE_POLL_SECONDS")
     assert main(["run", "--mode", "upload"]) == 0 and seen["poll_seconds"] == 600
+
+
+def test_a_poll_counts_only_its_own_garmin_requests(tmp_path, monkeypatch):
+    """The polls share the full run's Garmin session; summing its total per poll made 50 requests
+    look like 2000 in the daily summary (reported in the forum)."""
+    from garmin_intervals_bridge import cli
+
+    class Counting:
+        def __init__(self, *a, **k):
+            self.requests, self.client = 0, None
+
+    def full_run(settings, garmin, *a, **k):
+        garmin.requests += 50                                # the full run's downloads and reads
+        return {"seen": 1, "enriched": 1, "planned": 0, "scan_skipped": 1}
+
+    def poll(settings, garmin, *a, **k):
+        garmin.requests += 1 if poll.calls == 0 else 0      # one request in the first poll, none after
+        poll.calls += 1
+        return {"new": 0, "enriched": 0, "planned": 0}
+    poll.calls = 0
+    monkeypatch.setattr(cli, "GarminSource", Counting)
+    monkeypatch.setattr(cli, "sync_enrich", full_run)
+    monkeypatch.setattr(cli, "sync_wellness", lambda *a, **k: {"days_checked": 0, "writes": 0})
+    monkeypatch.setattr(cli, "watch_once", poll)
+    monkeypatch.setattr(cli, "wellness_check", lambda *a, **k: {})
+    monkeypatch.setattr(cli.time, "sleep", lambda s: None)
+    st = Store(tmp_path)
+    cli.run_loop(_loop_settings(tmp_path), st, apply=True, poll_seconds=60, sync_minutes=30, iterations=4)
+    assert [r["metrics"]["garmin_requests"] for r in st.recent_runs(1)] == [50, 1, 0, 0]
+    st.close()
